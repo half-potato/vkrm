@@ -136,3 +136,24 @@ float4 fs_isect(v2f i) : SV_Target {
 
     return c;
 }
+
+
+
+struct v2f_tri {
+    float4 pos : SV_Position;
+    float4 color : COLOR;
+};
+
+[shader("vertex")]
+v2f_tri vs_tri(float3 vertex: POSITION, float4 color: COLOR) {
+    v2f_tri o;
+    o.pos = mul(projection, mul(view, float4(vertex, 1)));
+    o.color = color;
+    return o;
+}
+
+[shader("fragment")]
+float4 fs_tri(v2f_tri i) : SV_Target {
+    float T = exp(-i.color.a);
+    return float4((1 - T) * i.color.rgb, T);
+}

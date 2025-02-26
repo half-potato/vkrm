@@ -5,6 +5,7 @@
 #include <Rose/Core/CommandContext.hpp>
 #include <Rose/Core/PipelineCache.hpp>
 #include <Rose/RadixSort/RadixSort.hpp>
+#include <Rose/Scene/Mesh.hpp>
 
 #include "Camera.hpp"
 
@@ -14,32 +15,39 @@ class DelaunayTetRenderer {
 private:
 	// render configuration
 	uint32_t renderMode = 0;
+	bool     wireframe = false;
 	float    pointSize = 50;
 	float    densityScale = 1;
-	float    percentTets = 1.f;
+	float    percentTets = 1.f; // percent of tets to draw
 	float    densityThreshold = 0.f;
+
 	bool     enableSorting = true;
-	bool     reorderTets = false;
+	bool     reorderTets = false; // reorder tet indices/colors after sorting
+
+	bool     reorderOnLoad = false; // reorder vertices after loading a scene
 
 	// pipelines for rendering
 	std::vector<PipelineCache> rasterPipelines;
-	PipelineCache computeCircumspheresPipeline = PipelineCache(FindShaderPath("Circumsphere.cs.slang"));
-	PipelineCache createSortPairsPipeline      = PipelineCache(FindShaderPath("TetSort.cs.slang"), "createPairs");
-	PipelineCache reorderTetPipeline           = PipelineCache(FindShaderPath("TetSort.cs.slang"), "reorderTets");
-	PipelineCache computeAlphaPipeline         = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"));
-
-	RadixSort radixSort;
+	PipelineCache createSpheresPipeline   = PipelineCache(FindShaderPath("GenSpheres.cs.slang"),   "main");
+	PipelineCache createSortPairsPipeline = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "createPairs");
+	PipelineCache reorderTetPipeline      = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "reorderTets");
+	PipelineCache createTrianglesPipeline = PipelineCache(FindShaderPath("GenTriangles.cs.slang"), "main");
+	PipelineCache computeAlphaPipeline    = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"),  "main");
 
 	// runtime data
+
+	RadixSort radixSort;
 
 	Camera camera;
 
 	BufferRange<float3> vertices;
-	BufferRange<float4> vertexColors;
+	BufferRange<float4> colors;
 	BufferRange<uint4>  indices;
 	BufferRange<float4> spheres;
-	float3 aabbMin;
-	float3 aabbMax;
+	BufferRange<uint3>  triangles;
+	BufferRange<VkDrawIndexedIndirectCommand> indirectArgs;
+	Mesh sceneMesh;
+	MeshLayout sceneMeshLayout;
 
 	float3 sceneTranslation = float3(0);
 	float3 sceneRotation = float3(0);
@@ -52,7 +60,10 @@ private:
 	ImageView renderTarget;
 
 	Pipeline* GetRenderPipeline(CommandContext& context);
-	void ComputeSpheres(CommandContext& context);
+
+	void ComputeSpheres(CommandContext& context, const ShaderParameter& scene);
+	void ComputeTriangles(CommandContext& context, const ShaderParameter& scene);
+	void Sort(CommandContext& context, const ShaderParameter& scene, const float3 cameraPosition);
 
 	ShaderParameter GetSceneParameter();
 

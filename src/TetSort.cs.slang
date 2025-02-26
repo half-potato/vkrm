@@ -17,15 +17,6 @@ uint order_preserving_float_map(float value) {
     uint uvalue = asuint(value);
     uint mask = -int(uvalue >> 31) | 0x80000000;
     uint bits = uvalue ^ mask;
-
-    bits = ((bits << 24) & 0xFF000000) |
-           ((bits << 8) & 0x00FF0000) |
-           ((bits >> 8) & 0x0000FF00) |
-           ((bits >> 24) & 0x000000FF);
-    //bits = ((bits & 0x000000FF) << 24) |
-    //       ((bits & 0x0000FF00) <<  8) |
-    //       ((bits & 0x00FF0000) >>  8) |
-    //       ((bits & 0xFF000000) >> 24);
     return bits;
 }
 
@@ -36,17 +27,14 @@ void createPairs(uint3 threadId: SV_DispatchThreadID) {
     if (tetId >= scene.numTets)
         return;
 
-    double4 sphere = scene.spheres[tetId];
-    double3 toSphere = sphere.xyz - (double3)cameraPosition;
-    float power = (float)(dot(toSphere, toSphere) - (sphere.w * sphere.w));
+    float4 sphere = scene.spheres[tetId];
+    float3 toSphere = sphere.xyz - cameraPosition;
+    float power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
 
-    if (power != power || isnan(power) || isinf(power))
-        power = FLT_MAX;
+    uint key = order_preserving_float_map(power);
 
-    power = sqrt(abs(power)) * sign(power);
-
-   	uint key = (uint)clamp(100*power, 0, UINT32_MAX);
-    //uint key = order_preserving_float_map(power);
+    if (sphere.w == 0 || power != power || isnan(power) || isinf(power))
+        key = UINT32_MAX;
 
     sortPairs[tetId] = uint2(key, tetId);
 }

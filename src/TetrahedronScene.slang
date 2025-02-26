@@ -16,15 +16,18 @@ struct TetrahedronScene {
         return colors[tetId];
 	}
 
-    float4x3 load_tet_vertices(uint tetId) {
-        uint4 inds = indices[tetId];
+    float4x3 load_tet_vertices(uint4 tet) {
         float4x3 v;
-        v[0] = load_vertex(inds[0]);
-        v[1] = load_vertex(inds[1]);
-        v[2] = load_vertex(inds[2]);
-        v[3] = load_vertex(inds[3]);
+        v[0] = load_vertex(tet[0]);
+        v[1] = load_vertex(tet[1]);
+        v[2] = load_vertex(tet[2]);
+        v[3] = load_vertex(tet[3]);
         return v;
 	}
+
+    float4x3 load_tet_vertices(uint tetId) {
+        return load_tet_vertices(indices[tetId]);
+    }
 };
 
 bool intersect_ray_tetrahedron(float3 orig, float3 dir, float4x3 verts, out float2 t) {

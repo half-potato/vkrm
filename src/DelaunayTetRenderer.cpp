@@ -1,6 +1,7 @@
 #include <portable-file-dialogs.h>
 #include <tinyply.h>
 
+#include <Rose/Scene/Mesh.hpp>
 #include <Rose/RadixSort/RadixSort.hpp>
 
 #include "DelaunayTetRenderer.hpp"
@@ -19,12 +20,28 @@ struct RasterConfig {
 };
 static const RasterConfig kRasterConfigurations[] {
 	{
-		.name = "Circumcenters",
-		.vs = "vs_spheres",
+		.name = "Full tets",
+		.vs = "vs_tet",
+		.fs = "fs_isect",
+		.defs = {},
+		.topology = vk::PrimitiveTopology::eTriangleList,
+		.polygonMode = vk::PolygonMode::eFill,
+	},
+	{
+		.name = "Full tets (no intersect)",
+		.vs = "vs_tet",
 		.fs = "fs_color",
 		.defs = { { "SCALE_DENSITY_BY_SIZE", "1" } },
-		.topology = vk::PrimitiveTopology::ePointList,
-		.polygonMode = vk::PolygonMode::ePoint,
+		.topology = vk::PrimitiveTopology::eTriangleList,
+		.polygonMode = vk::PolygonMode::eFill,
+	},
+	{
+		.name = "Triangles + Culling",
+		.vs = "vs_tri",
+		.fs = "fs_tri",
+		.defs = {},
+		.topology = vk::PrimitiveTopology::eTriangleList,
+		.polygonMode = vk::PolygonMode::eFill,
 	},
 	{
 		.name = "Billboards",
@@ -35,39 +52,27 @@ static const RasterConfig kRasterConfigurations[] {
 		.polygonMode = vk::PolygonMode::ePoint,
 	},
 	{
-		.name = "Wireframe",
-		.vs = "vs_tet",
+		.name = "Circumcenters",
+		.vs = "vs_spheres",
 		.fs = "fs_color",
 		.defs = { { "SCALE_DENSITY_BY_SIZE", "1" } },
-		.topology = vk::PrimitiveTopology::eTriangleList,
-		.polygonMode = vk::PolygonMode::eLine,
-	},
-	{
-		.name = "Faces",
-		.vs = "vs_tet",
-		.fs = "fs_color",
-		.defs = { { "SCALE_DENSITY_BY_SIZE", "1" } },
-		.topology = vk::PrimitiveTopology::eTriangleList,
-		.polygonMode = vk::PolygonMode::eFill,
-	},
-	{
-		.name = "Faces + Intersection",
-		.vs = "vs_tet",
-		.fs = "fs_isect",
-		.defs = {},
-		.topology = vk::PrimitiveTopology::eTriangleList,
-		.polygonMode = vk::PolygonMode::eFill,
+		.topology = vk::PrimitiveTopology::ePointList,
+		.polygonMode = vk::PolygonMode::ePoint,
 	},
 };
+}
+
+void OptimizeScene(std::span<const float3> vertices, std::span<const uint4> indices, std::span<const float4> colors) {
+	
 }
 
 Pipeline* DelaunayTetRenderer::GetRenderPipeline(CommandContext& context) {
 	if (rasterPipelines.size() < std::ranges::size(kRasterConfigurations))
 		rasterPipelines.resize(std::ranges::size(kRasterConfigurations));
+		
 	const RasterConfig& cfg = kRasterConfigurations[renderMode];
 
 	auto& pipeline = rasterPipelines[renderMode];
-
 	if (!pipeline) {
 		pipeline = PipelineCache({
 			{ FindShaderPath("DelaunayTetRenderer.3d.slang"), cfg.vs },
@@ -75,14 +80,26 @@ Pipeline* DelaunayTetRenderer::GetRenderPipeline(CommandContext& context) {
 		});
 	}
 
+	ShaderDefines defines = cfg.defs;
+	defines["REORDER_TETS"] = reorderTets ? "1" : "0";
+
+	if (cfg.vs == std::string_view("vs_tri")) {
+		sceneMeshLayout = sceneMesh.GetLayout(*pipeline.getShader(context.GetDevice(), 0, defines));
+	} else {
+		sceneMeshLayout = {};
+	}
+
 	GraphicsPipelineInfo pipelineInfo {
-		.vertexInputState = VertexInputDescription{}, // no vertex shader input
+		.vertexInputState = VertexInputDescription{
+			.bindings   = sceneMeshLayout.bindings,
+			.attributes = sceneMeshLayout.attributes,
+		},
 		.inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{
 			.topology = cfg.topology },
 		.rasterizationState = vk::PipelineRasterizationStateCreateInfo{
 			.depthClampEnable = false,
 			.rasterizerDiscardEnable = false,
-			.polygonMode = cfg.polygonMode,
+			.polygonMode = (wireframe && cfg.polygonMode == vk::PolygonMode::eFill ? vk::PolygonMode::eLine : cfg.polygonMode),
 			.cullMode = vk::CullModeFlagBits::eNone,
 			.frontFace = vk::FrontFace::eCounterClockwise,
 			.depthBiasEnable = false },
@@ -109,35 +126,79 @@ Pipeline* DelaunayTetRenderer::GetRenderPipeline(CommandContext& context) {
 		.dynamicRenderingState = DynamicRenderingState{
 			.colorFormats = { renderTarget.GetImage()->Info().format } } };
 
-	ShaderDefines defines = cfg.defs;
-	defines["REORDER_TETS"] = reorderTets ? "1" : "0";
-
 	return pipeline.get(context.GetDevice(), defines, pipelineInfo).get();
 }
 
 ShaderParameter DelaunayTetRenderer::GetSceneParameter() {
 	ShaderParameter sceneParams = {};
 	sceneParams["vertices"] = (BufferParameter)vertices;
-	sceneParams["colors"]   = (BufferParameter)vertexColors;
+	sceneParams["colors"]   = (BufferParameter)colors;
 	sceneParams["indices"]  = (BufferParameter)indices;
 	sceneParams["spheres"]  = (BufferParameter)spheres;
 	sceneParams["numTets"]  = (uint32_t)indices.size();
-	sceneParams["aabbMin"] = aabbMin;
-	sceneParams["aabbMax"] = aabbMax;
+	sceneParams["aabbMin"] = float3(sceneMesh.aabb.minX, sceneMesh.aabb.minY, sceneMesh.aabb.minZ);
+	sceneParams["aabbMax"] = float3(sceneMesh.aabb.maxX, sceneMesh.aabb.maxY, sceneMesh.aabb.maxZ);
 	return sceneParams;
 }
 
-void DelaunayTetRenderer::ComputeSpheres(CommandContext& context) {
+void DelaunayTetRenderer::ComputeSpheres(CommandContext& context, const ShaderParameter& scene) {
 	ShaderParameter parameters = {};
-	parameters["scene"] = GetSceneParameter();
+	parameters["scene"] = scene;
 	parameters["outputSpheres"] = (BufferParameter)spheres;
 
-	context.Dispatch(*computeCircumspheresPipeline.get(context.GetDevice()), (uint32_t)indices.size(), parameters);
+	context.Dispatch(*createSpheresPipeline.get(context.GetDevice()), (uint32_t)indices.size(), parameters);
 	context.AddBarrier(spheres.SetState(Buffer::ResourceState{
 		.stage = vk::PipelineStageFlagBits2::eComputeShader,
 		.access = vk::AccessFlagBits2::eShaderRead|vk::AccessFlagBits2::eShaderWrite,
 		.queueFamily = context.QueueFamily()
 	}));
+}
+
+void DelaunayTetRenderer::ComputeTriangles(CommandContext& context, const ShaderParameter& scene) {
+	ShaderParameter parameters = {};
+	parameters["scene"] = scene;
+	parameters["triangles"] = (BufferParameter)triangles;
+	parameters["indirectArgs"] = (BufferParameter)indirectArgs;
+
+	context.Dispatch(*createTrianglesPipeline.get(context.GetDevice()), (uint32_t)indices.size(), parameters);
+	context.AddBarrier(triangles.SetState(Buffer::ResourceState{
+		.stage = vk::PipelineStageFlagBits2::eComputeShader,
+		.access = vk::AccessFlagBits2::eShaderRead|vk::AccessFlagBits2::eShaderWrite,
+		.queueFamily = context.QueueFamily()
+	}));
+	context.AddBarrier(indirectArgs.SetState(Buffer::ResourceState{
+		.stage = vk::PipelineStageFlagBits2::eComputeShader,
+		.access = vk::AccessFlagBits2::eShaderRead|vk::AccessFlagBits2::eShaderWrite,
+		.queueFamily = context.QueueFamily()
+	}));
+}
+
+void DelaunayTetRenderer::Sort(CommandContext& context, const ShaderParameter& scene, const float3 cameraPosition) {
+	if (!sortPairs || sortPairs.size() != indices.size()) {
+		sortPairs = Buffer::Create(context.GetDevice(), indices.size()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
+	}
+	if (reorderTets && (!sortedColors || sortedColors.size() != indices.size())) {
+		sortedColors  = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
+		sortedIndices = Buffer::Create(context.GetDevice(), indices.size()*sizeof(uint4),  vk::BufferUsageFlagBits::eStorageBuffer);
+		sortedSpheres = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
+	}
+
+	ShaderParameter params = {};
+	params["scene"] = scene;
+	params["sortPairs"]     = (BufferParameter)sortPairs;
+	params["sortedColors"]  = (BufferParameter)sortedColors;
+	params["sortedIndices"] = (BufferParameter)sortedIndices;
+	params["sortedSpheres"] = (BufferParameter)sortedSpheres;
+	params["cameraPosition"] = cameraPosition;
+
+	Pipeline& createSortPairs = *createSortPairsPipeline.get(context.GetDevice());
+	auto descriptorSets = context.GetDescriptorSets(*createSortPairs.Layout());
+	context.UpdateDescriptorSets(*descriptorSets, params, *createSortPairs.Layout());
+	context.Dispatch(createSortPairs, (uint32_t)indices.size(), *descriptorSets);
+
+	radixSort(context, sortPairs);
+
+	if (reorderTets) context.Dispatch(*reorderTetPipeline.get(context.GetDevice()), (uint32_t)indices.size(), *descriptorSets);
 }
 
 void DelaunayTetRenderer::LoadScene(CommandContext& context, const std::filesystem::path& p) {
@@ -164,22 +225,45 @@ void DelaunayTetRenderer::LoadScene(CommandContext& context, const std::filesyst
 	//std::cout << "\tpos " << pos[inds[0][0]] << "   " << pos[inds[0][1]] << "   " << pos[inds[0][2]] << "   " << pos[inds[0][3]] << "   " << std::endl;
 	//std::cout << "\tcol " << col[0] << std::endl;
 
-	context.GetDevice().Wait();
+	if (reorderOnLoad) {
+		OptimizeScene(pos, inds, col);
+	}
 
-	vertices     = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
-	vertexColors = context.UploadData(col,  vk::BufferUsageFlagBits::eStorageBuffer);
-	indices      = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
+	context.GetDevice().Wait(); // wait in case vertices/colors/indices are in use still
 
-	spheres = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
+	vertices = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer|vk::BufferUsageFlagBits::eVertexBuffer);
+	colors   = context.UploadData(col,  vk::BufferUsageFlagBits::eStorageBuffer|vk::BufferUsageFlagBits::eVertexBuffer);
+	indices  = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
 
-	aabbMin = float3( FLT_MAX );
-	aabbMax = float3( FLT_MIN );
+	// at most 3 visible triangles per tet
+	triangles    = Buffer::Create(context.GetDevice(), 3*indices.size()*sizeof(uint3), vk::BufferUsageFlagBits::eStorageBuffer|vk::BufferUsageFlagBits::eIndexBuffer);
+	spheres      = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4),  vk::BufferUsageFlagBits::eStorageBuffer);
+	indirectArgs = Buffer::Create(context.GetDevice(), sizeof(VkDrawIndexedIndirectCommand),  vk::BufferUsageFlagBits::eStorageBuffer|vk::BufferUsageFlagBits::eIndirectBuffer);
+
+	sceneMesh = Mesh{
+		.vertexAttributes = {
+			{ MeshVertexAttributeType::ePosition, { MeshVertexAttribute{ (BufferView)vertices, MeshVertexAttributeLayout{ .stride = sizeof(float)*3, .format = vk::Format::eR32G32B32Sfloat } } } },
+			{ MeshVertexAttributeType::eColor,    { MeshVertexAttribute{ (BufferView)colors,   MeshVertexAttributeLayout{ .stride = sizeof(float)*4, .format = vk::Format::eR32G32B32A32Sfloat } } } },
+		},
+		.indexBuffer = triangles,
+		.indexSize = sizeof(uint32_t),
+		.topology = vk::PrimitiveTopology::eTriangleList
+	};
+
+	float3 aabbMin = float3( FLT_MAX );
+	float3 aabbMax = float3( FLT_MIN );
 	for (float3 p : pos) {
 		aabbMin = min(p, aabbMin);
 		aabbMax = max(p, aabbMax);
 	}
+	sceneMesh.aabb.minX = aabbMin.x;
+	sceneMesh.aabb.minY = aabbMin.y;
+	sceneMesh.aabb.minZ = aabbMin.z;
+	sceneMesh.aabb.maxX = aabbMax.x;
+	sceneMesh.aabb.maxY = aabbMax.y;
+	sceneMesh.aabb.maxZ = aabbMax.z;
 
-	ComputeSpheres(context);
+	ComputeSpheres(context, GetSceneParameter());
 }
 
 void DelaunayTetRenderer::RenderWidget(CommandContext& context, const double dt) {
@@ -217,6 +301,8 @@ void DelaunayTetRenderer::RenderProperties(CommandContext& context) {
 	}
 
 	if (ImGui::CollapsingHeader("Scene")) {
+		ImGui::Checkbox("Reorder on load", &reorderOnLoad);
+		ImGui::Separator();
 		ImGui::Text("%llu tetrahedra", indices.size());
 		ImGui::Text("%llu vertices", vertices.size());
 		ImGui::Separator();
@@ -225,6 +311,7 @@ void DelaunayTetRenderer::RenderProperties(CommandContext& context) {
 		ImGui::DragFloat("Scale", &sceneScale, 0.01f, 0.f, 1000.f);
 		ImGui::Separator();
 		Gui::ScalarField("Density scale", &densityScale, 0.f, 1e4f, 0.01f);
+
 	}
 
 	if (ImGui::CollapsingHeader("Renderer")) {
@@ -245,11 +332,12 @@ void DelaunayTetRenderer::RenderProperties(CommandContext& context) {
 		ImGui::Checkbox("Sorting", &enableSorting);
 		if (enableSorting) {
 			ImGui::Checkbox("Reordering", &reorderTets);
-			ImGui::SetTooltip("Reorder tet data after sorting. Avoids a layer of\nindirection at the cost of an extra copy step.");
+			//ImGui::SetTooltip("Reorder tet data after sorting. Avoids a layer of\nindirection at the cost of an extra copy step.");
 		}
-
 		if (kRasterConfigurations[renderMode].polygonMode == vk::PolygonMode::ePoint) {
 			Gui::ScalarField("Point size", &pointSize, 0.1f, 0.f, 0.1f);
+		} else {
+			ImGui::Checkbox("Wireframe", &wireframe);
 		}
 	}
 }
@@ -262,6 +350,8 @@ void DelaunayTetRenderer::Render(CommandContext& context) {
 		return;
 	}
 
+	bool rasterTris = kRasterConfigurations[renderMode].vs == std::string_view("vs_tri");
+
 	ShaderParameter sceneParams = GetSceneParameter();
 
 	float4x4 sceneToWorld = glm::translate(sceneTranslation) * glm::toMat4(glm::quat(sceneRotation)) * float4x4(sceneScale);
@@ -269,37 +359,16 @@ void DelaunayTetRenderer::Render(CommandContext& context) {
 
 	// sort
 	if (enableSorting) {
-		if (!sortPairs || sortPairs.size() != indices.size()) {
-			sortPairs = Buffer::Create(context.GetDevice(), indices.size()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
-		}
-		if (reorderTets && (!sortedColors || sortedColors.size() != indices.size())) {
-			sortedColors  = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
-			sortedIndices = Buffer::Create(context.GetDevice(), indices.size()*sizeof(uint4),  vk::BufferUsageFlagBits::eStorageBuffer);
-			sortedSpheres = Buffer::Create(context.GetDevice(), indices.size()*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
-		}
-
-		ShaderParameter params = {};
-		params["scene"] = sceneParams;
-		params["sortPairs"]     = (BufferParameter)sortPairs;
-		params["sortedColors"]  = (BufferParameter)sortedColors;
-		params["sortedIndices"] = (BufferParameter)sortedIndices;
-		params["sortedSpheres"] = (BufferParameter)sortedSpheres;
-		params["cameraPosition"] = (float3)(worldToScene * float4(camera.position, 1));
-
-		Pipeline& createSortPairs = *createSortPairsPipeline.get(context.GetDevice());
-		auto descriptorSets = context.GetDescriptorSets(*createSortPairs.Layout());
-		context.UpdateDescriptorSets(*descriptorSets, params, *createSortPairs.Layout());
-		context.Dispatch(createSortPairs, (uint32_t)indices.size(), *descriptorSets);
-
-		radixSort(context, sortPairs);
-
+		Sort(context, sceneParams, (float3)(worldToScene * float4(camera.position, 1)));
 		if (reorderTets) {
-			context.Dispatch(*reorderTetPipeline.get(context.GetDevice()), (uint32_t)indices.size(), *descriptorSets);
-
 			sceneParams["colors"]  = (BufferParameter)sortedColors;
 			sceneParams["indices"] = (BufferParameter)sortedIndices;
 			sceneParams["spheres"] = (BufferParameter)sortedSpheres;
 		}
+	}
+
+	if (rasterTris) {
+		ComputeTriangles(context, sceneParams);
 	}
 
 	// rasterize tets
@@ -371,8 +440,13 @@ void DelaunayTetRenderer::Render(CommandContext& context) {
 
 			if (kRasterConfigurations[renderMode].polygonMode == vk::PolygonMode::ePoint)
 				context->draw(tetCount, 1, 0, 0); // 1 vert per tet
-			else
-				context->draw(12, tetCount, 0, 0); // 4 tris per tet x 3 verts per tri -> 12 vertices
+			else {
+				if (rasterTris) {
+					sceneMesh.Bind(context, sceneMeshLayout);
+					context->drawIndexedIndirect(**indirectArgs.mBuffer, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+				} else
+					context->draw(12, tetCount, 0, 0); // 4 tris per tet x 3 verts per tri -> 12 vertices per tet
+			}
 		}
 
 		context->endRendering();
