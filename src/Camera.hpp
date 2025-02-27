@@ -55,8 +55,8 @@ struct Camera {
 		ImGui::DragFloat3("Position", &position.x);
 		ImGui::DragFloat("Pitch", &eulerAngles.x, float(M_1_PI), -float(M_PI/2), float(M_PI/2));
 		ImGui::DragFloat("Yaw",   &eulerAngles.y, float(M_1_PI), -float(M_PI), float(M_PI));
-		ImGui::DragFloat("Near Z", &nearZ, 0.01f, 1e-6f);
-		ImGui::DragFloat("Far Z", &nearZ, 0.01f, nearZ);
+		ImGui::DragFloat("Near Z", &nearZ, 0.01f, 1e-6f, farZ);
+		ImGui::DragFloat("Far Z", &farZ, 0.01f, nearZ);
         ImGui::DragFloat("Vertical FoV", &fovY, float(M_1_PI), 0.f, (float)M_PI);
         ImGui::DragFloat("Move speed", &moveSpeed, 1.f, 0.f, 1e9f);
 

@@ -34,7 +34,7 @@ def gen_tets(N):
 			verts += [ v ]
 
 		c = np.array([ 0.5, 0.5, 0.5, 40 ], dtype=np.float32)
-		c[i%3] = 1.0
+		c[1 + i%3] = 1.0
 		cols += [ c ]
 
 		tets += [ [ i*4 + 0, i*4 + 1, i*4 + 2, i*4 + 3 ] ]
@@ -91,8 +91,8 @@ if __name__ == "__main__":
 		print("Usage: python %s [path]" % sys.argv[0])
 		exit(1)
 
-	#verts, cols, tets = gen_tets(5)
-	verts, cols, tets = gen_tets_sphere((16,8), 1.0)
+	verts, cols, tets = gen_tets(5)
+	#verts, cols, tets = gen_tets_sphere((16,8), 1.0)
 
 	#print(verts)
 

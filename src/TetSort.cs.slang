@@ -1,6 +1,9 @@
 import Rose.Core.MathUtils;
 import Rose.Core.Quaternion;
 import TetrahedronScene;
+import SortUtils;
+
+using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
 
@@ -10,15 +13,6 @@ RWStructuredBuffer<uint4>  sortedIndices;
 RWStructuredBuffer<float4> sortedSpheres;
 
 uniform float3 cameraPosition;
-
-uint order_preserving_float_map(float value) {
-    // For negative values, the mask becomes 0xffffffff.
-    // For positive values, the mask becomes 0x80000000.
-    uint uvalue = asuint(value);
-    uint mask = -int(uvalue >> 31) | 0x80000000;
-    uint bits = uvalue ^ mask;
-    return bits;
-}
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -49,6 +43,6 @@ void reorderTets(uint3 threadId: SV_DispatchThreadID) {
     uint srcTet = sortPairs[tetId].y;
 
     sortedColors[tetId]  = scene.colors[srcTet];
-    sortedIndices[tetId] = scene.indices[srcTet];
+    sortedIndices[tetId] = scene.load_tet_indices(srcTet);
     sortedSpheres[tetId] = scene.spheres[srcTet];
 }

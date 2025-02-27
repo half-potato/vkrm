@@ -1,7 +1,27 @@
 struct TetrahedronScene {
+    static const uint3 kTetTriangles[4] = {
+        /* 
+        *    y
+        *    ^
+        *    |
+        *    *v2    z
+        *    |     /
+        *    |    *v3
+        *    |   /
+        *    |  /
+        *    | /          v1
+        *    v0------------*--->x
+        *                 
+        */
+        uint3(0, 2, 1),
+        uint3(1, 2, 3),
+        uint3(0, 3, 2),
+        uint3(3, 0, 1),
+    };
+
     ByteAddressBuffer        vertices;
     StructuredBuffer<float4> colors;
-    StructuredBuffer<uint4>  indices;
+    ByteAddressBuffer        indices;
 	StructuredBuffer<float4> spheres;
 
 	float3 aabbMin;
@@ -12,22 +32,32 @@ struct TetrahedronScene {
         return vertices.Load<float3>(vertexId * sizeof(float3));
     }
 
+    float3 load_vertex(uint tetId, uint tetVertexId) {
+        uint vertexId = indices.Load((tetId * 4 + tetVertexId) * sizeof(uint));
+        return load_vertex(vertexId);
+    }
+    
+    uint4 load_tet_indices(uint tetId) {
+        return indices.Load4(tetId * sizeof(uint4));
+    }
+
+    float4x3 load_tet_vertices(uint4 tetIndices) {
+        float4x3 v;
+        v[0] = load_vertex(tetIndices[0]);
+        v[1] = load_vertex(tetIndices[1]);
+        v[2] = load_vertex(tetIndices[2]);
+        v[3] = load_vertex(tetIndices[3]);
+        return v;
+	}
+
+    float4x3 load_tet_vertices(uint tetId) { 
+        return load_tet_vertices(load_tet_indices(tetId));
+    }
+    
     float4 load_rgb_density(uint tetId) {
         return colors[tetId];
 	}
 
-    float4x3 load_tet_vertices(uint4 tet) {
-        float4x3 v;
-        v[0] = load_vertex(tet[0]);
-        v[1] = load_vertex(tet[1]);
-        v[2] = load_vertex(tet[2]);
-        v[3] = load_vertex(tet[3]);
-        return v;
-	}
-
-    float4x3 load_tet_vertices(uint tetId) {
-        return load_tet_vertices(indices[tetId]);
-    }
 };
 
 bool intersect_ray_tetrahedron(float3 orig, float3 dir, float4x3 verts, out float2 t) {

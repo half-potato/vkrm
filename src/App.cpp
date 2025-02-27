@@ -7,7 +7,8 @@ using namespace RoseEngine;
 
 int main(int argc, const char** argv) {
 	WindowedApp app("DelaunayTetRenderer", {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
 	});
 
 	DelaunayTetRenderer renderer;
@@ -38,7 +39,7 @@ int main(int argc, const char** argv) {
 
 	app.AddWidget("Viewport", [&]() {
 		renderer.RenderWidget(*app.contexts[app.swapchain->ImageIndex()], app.dt);
-	}, true);
+	}, true, WindowedApp::WidgetFlagBits::eNoBorders);
 
 	app.Run();
 

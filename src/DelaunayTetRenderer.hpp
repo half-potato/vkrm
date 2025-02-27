@@ -16,7 +16,7 @@ private:
 	// render configuration
 	uint32_t renderMode = 0;
 	bool     wireframe = false;
-	float    pointSize = 50;
+	float    pointSize = 20;
 	float    densityScale = 1;
 	float    percentTets = 1.f; // percent of tets to draw
 	float    densityThreshold = 0.f;
@@ -28,11 +28,10 @@ private:
 
 	// pipelines for rendering
 	std::vector<PipelineCache> rasterPipelines;
-	PipelineCache createSpheresPipeline   = PipelineCache(FindShaderPath("GenSpheres.cs.slang"),   "main");
-	PipelineCache createSortPairsPipeline = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "createPairs");
-	PipelineCache reorderTetPipeline      = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "reorderTets");
-	PipelineCache createTrianglesPipeline = PipelineCache(FindShaderPath("GenTriangles.cs.slang"), "main");
-	PipelineCache computeAlphaPipeline    = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"),  "main");
+	PipelineCache createSpheresPipeline    = PipelineCache(FindShaderPath("GenSpheres.cs.slang"),   "main");
+	PipelineCache createSortPairsPipeline  = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "createPairs");
+	PipelineCache reorderTetPipeline       = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "reorderTets");
+	PipelineCache computeAlphaPipeline     = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"),  "main");
 
 	// runtime data
 
@@ -44,11 +43,7 @@ private:
 	BufferRange<float4> colors;
 	BufferRange<uint4>  indices;
 	BufferRange<float4> spheres;
-	BufferRange<uint3>  triangles;
-	BufferRange<VkDrawIndexedIndirectCommand> indirectArgs;
-	Mesh sceneMesh;
-	MeshLayout sceneMeshLayout;
-
+	
 	float3 sceneTranslation = float3(0);
 	float3 sceneRotation = float3(0);
 	float  sceneScale = 1.f;
@@ -58,11 +53,15 @@ private:
 	BufferRange<float4> sortedColors;
 	BufferRange<uint4>  sortedIndices;
 	ImageView renderTarget;
+	ImageView depthBuffer;
+
+	float3 minVertex;
+	float3 maxVertex;
 
 	Pipeline* GetRenderPipeline(CommandContext& context);
 
 	void ComputeSpheres(CommandContext& context, const ShaderParameter& scene);
-	void ComputeTriangles(CommandContext& context, const ShaderParameter& scene);
+	void ComputeTriangles(CommandContext& context, const ShaderParameter& scene, const float3 rayOrigin);
 	void Sort(CommandContext& context, const ShaderParameter& scene, const float3 cameraPosition);
 
 	ShaderParameter GetSceneParameter();
