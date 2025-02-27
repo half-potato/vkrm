@@ -2,7 +2,9 @@
 
 #include <Rose/Core/Gui.hpp>
 
-namespace RoseEngine {
+namespace vkDelTet {
+
+using namespace RoseEngine;
 
 struct Camera {
 	float3 position = float3(0, 2, 4);

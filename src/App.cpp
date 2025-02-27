@@ -3,12 +3,11 @@
 
 #include "DelaunayTetRenderer.hpp"
 
-using namespace RoseEngine;
+using namespace vkDelTet;
 
 int main(int argc, const char** argv) {
 	WindowedApp app("DelaunayTetRenderer", {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-		VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME,
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	});
 
 	DelaunayTetRenderer renderer;
@@ -34,11 +33,11 @@ int main(int argc, const char** argv) {
 	});
 
 	app.AddWidget("Properties", [&]() {
-		renderer.RenderProperties(*app.contexts[app.swapchain->ImageIndex()]);
+		renderer.DrawPropertiesGui(*app.contexts[app.swapchain->ImageIndex()]);
 	}, true);
 
 	app.AddWidget("Viewport", [&]() {
-		renderer.RenderWidget(*app.contexts[app.swapchain->ImageIndex()], app.dt);
+		renderer.DrawWidgetGui(*app.contexts[app.swapchain->ImageIndex()], app.dt);
 	}, true, WindowedApp::WidgetFlagBits::eNoBorders);
 
 	app.Run();

@@ -1,0 +1,139 @@
+#pragma once
+
+#include "../RenderContext.hpp"
+
+namespace vkDelTet {
+
+class TetFaceRenderer { 
+private:
+    float percentTets = 1.f; // percent of tets to draw
+    float densityThreshold = 0.f;
+    bool  wireframe = false;
+    bool  constantDensity = false;
+    bool  preTransformVertices = false;
+
+    BufferRange<float4> transformedVertices;
+
+    PipelineCache renderPipeline = PipelineCache({
+        { FindShaderPath("TetFaceRenderer.3d.slang"), "vsmain" },
+        { FindShaderPath("TetFaceRenderer.3d.slang"), "fsmain" }
+    });
+    PipelineCache preTransformPipeline = PipelineCache(FindShaderPath("PreTransform.cs.slang"), "main");
+
+
+    inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
+        ShaderDefines defines {
+            { "TET_INTERSECTION", constantDensity ? "0" : "1" },
+            { "PRE_TRANSFORM",    preTransformVertices ? "1" : "0" }
+        };
+
+        GraphicsPipelineInfo pipelineInfo {
+            .vertexInputState = VertexInputDescription{},
+            .inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{
+                .topology = vk::PrimitiveTopology::eTriangleList },
+            .rasterizationState = vk::PipelineRasterizationStateCreateInfo{
+                .depthClampEnable = false,
+                .rasterizerDiscardEnable = false,
+                .polygonMode = wireframe ? vk::PolygonMode::eLine : vk::PolygonMode::eFill,
+                .cullMode = vk::CullModeFlagBits::eFront,
+                .frontFace = vk::FrontFace::eCounterClockwise,
+                .depthBiasEnable = false },
+            .multisampleState = vk::PipelineMultisampleStateCreateInfo{},
+            .depthStencilState = vk::PipelineDepthStencilStateCreateInfo{
+                .depthTestEnable = false,
+                .depthWriteEnable = false,
+                .depthCompareOp = vk::CompareOp::eLess,
+                .depthBoundsTestEnable = false,
+                .stencilTestEnable = false },
+            .viewports = { vk::Viewport{} },
+            .scissors = { vk::Rect2D{} },
+            .colorBlendState = ColorBlendState{
+                .attachments = { renderContext.GetBlendState() } },
+            .dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor },
+            .dynamicRenderingState = DynamicRenderingState{
+                .colorFormats = { renderContext.renderTarget.GetImage()->Info().format } } };
+
+        return *renderPipeline.get(context.GetDevice(), defines, pipelineInfo).get();
+    }
+
+public:
+    inline const char* Name() const { return "Faces"; }
+    inline const char* Description() const { return "Draw all tet faces, and compute intersection in fragment shader"; }
+
+	void DrawGui(CommandContext& context) {
+		ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.f);
+		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
+
+        ImGui::Checkbox("Wireframe", &wireframe);
+        ImGui::Checkbox("Force constant density", &constantDensity);
+        ImGui::Checkbox("Pre-transform vertices", &preTransformVertices);
+    }
+
+	void Render(CommandContext& context, RenderContext& renderContext) {
+        const uint2 extent = (uint2)renderContext.renderTarget.Extent();
+        const float4x4 cameraToWorld = renderContext.camera.GetCameraToWorld();
+        const float4x4 sceneToWorld  = renderContext.scene.Transform();
+        const float4x4 worldToScene  = inverse(sceneToWorld);
+        const float4x4 sceneToCamera = inverse(cameraToWorld) * sceneToWorld;
+        const float4x4 projection = renderContext.camera.GetProjection((float)extent.x / (float)extent.y);
+        const float4x4 viewProjection = projection * sceneToCamera;
+        const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
+
+        ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
+
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
+
+        if (preTransformVertices) {
+            if (!transformedVertices || transformedVertices.size() != renderContext.scene.VertexCount()) {
+                transformedVertices = Buffer::Create(context.GetDevice(), sizeof(float4)*renderContext.scene.VertexCount(), vk::BufferUsageFlagBits::eStorageBuffer);
+            }
+
+            ShaderParameter params;
+            params["vertices"] = sceneParams.at("vertices");
+            params["transformedVertices"] = (BufferParameter)transformedVertices;
+            params["transform"] = viewProjection;
+            params["vertexCount"] = renderContext.scene.VertexCount();
+            context.Dispatch(*preTransformPipeline.get(context.GetDevice()), renderContext.scene.VertexCount(), params);
+        }
+
+        context.PushDebugLabel("Rasterize");
+
+        Pipeline& pipeline = GetPipeline(context, renderContext);
+        auto descriptorSets = context.GetDescriptorSets(*pipeline.Layout());
+
+        // prepare draw parameters
+        {
+            ShaderParameter params = {};
+            params["scene"] = sceneParams;
+            params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
+            params["transformedVertices"] = (BufferParameter)transformedVertices;
+            params["viewProjection"] = viewProjection;
+            params["invProjection"] = inverse(projection);
+            params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.Rotation()));
+            params["rayOrigin"] = rayOrigin;
+            params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
+            params["outputResolution"] = (float2)extent;
+
+            context.UpdateDescriptorSets(*descriptorSets, params, *pipeline.Layout());
+        }
+
+        // rasterize scene
+
+        renderContext.BeginRendering(context);       
+        context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
+        context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
+
+        uint32_t tetCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
+        if (tetCount > 0) {
+            context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
+            context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
+            context->draw(12, tetCount, 0, 0); // 4 tris per tet x 3 verts per tri -> 12 vertices per tet
+        }
+
+        renderContext.EndRendering(context);
+
+        context.PopDebugLabel();
+    }
+};
+
+}

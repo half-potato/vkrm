@@ -7,70 +7,108 @@
 #include <Rose/RadixSort/RadixSort.hpp>
 #include <Rose/Scene/Mesh.hpp>
 
-#include "Camera.hpp"
+#include "Renderers/CentroidRenderer.hpp"
+#include "Renderers/BillboardRenderer.hpp"
+#include "Renderers/TetFaceRenderer.hpp"
 
-namespace RoseEngine {
+namespace vkDelTet {
 
 class DelaunayTetRenderer {
 private:
-	// render configuration
-	uint32_t renderMode = 0;
-	bool     wireframe = false;
-	float    pointSize = 20;
-	float    densityScale = 1;
-	float    percentTets = 1.f; // percent of tets to draw
-	float    densityThreshold = 0.f;
+	std::tuple<
+		TetFaceRenderer,
+		BillboardRenderer,
+		CentroidRenderer
+	> renderers;
+	uint32_t rendererIndex = 0;
 
-	bool     enableSorting = true;
-	bool     reorderTets = false; // reorder tet indices/colors after sorting
+	RenderContext renderContext;
 
-	bool     reorderOnLoad = false; // reorder vertices after loading a scene
-
-	// pipelines for rendering
-	std::vector<PipelineCache> rasterPipelines;
-	PipelineCache createSpheresPipeline    = PipelineCache(FindShaderPath("GenSpheres.cs.slang"),   "main");
-	PipelineCache createSortPairsPipeline  = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "createPairs");
-	PipelineCache reorderTetPipeline       = PipelineCache(FindShaderPath("TetSort.cs.slang"),      "reorderTets");
-	PipelineCache computeAlphaPipeline     = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"),  "main");
-
-	// runtime data
-
-	RadixSort radixSort;
-
-	Camera camera;
-
-	BufferRange<float3> vertices;
-	BufferRange<float4> colors;
-	BufferRange<uint4>  indices;
-	BufferRange<float4> spheres;
-	
-	float3 sceneTranslation = float3(0);
-	float3 sceneRotation = float3(0);
-	float  sceneScale = 1.f;
-
-	BufferRange<float4> sortedSpheres;
-	BufferRange<uint2>  sortPairs;
-	BufferRange<float4> sortedColors;
-	BufferRange<uint4>  sortedIndices;
-	ImageView renderTarget;
-	ImageView depthBuffer;
-
-	float3 minVertex;
-	float3 maxVertex;
-
-	Pipeline* GetRenderPipeline(CommandContext& context);
-
-	void ComputeSpheres(CommandContext& context, const ShaderParameter& scene);
-	void ComputeTriangles(CommandContext& context, const ShaderParameter& scene, const float3 rayOrigin);
-	void Sort(CommandContext& context, const ShaderParameter& scene, const float3 cameraPosition);
-
-	ShaderParameter GetSceneParameter();
+	template<size_t I>
+	inline auto CallRendererFn_(auto&& fn, uint32_t idx) {
+		if (idx == I) {
+			return fn( std::get<I>(renderers) );
+		} else if constexpr (I+1 < std::tuple_size_v<decltype(renderers)>) {
+			return CallRendererFn_<I + 1>(fn, idx);
+		}
+		std::unreachable();
+	}
+	inline auto CallRendererFn(auto&& fn, uint32_t idx) { return CallRendererFn_<0>(fn, idx); }
+	inline auto CallRendererFn(auto&& fn) { return CallRendererFn_<0>(fn, rendererIndex); }
 
 public:
-	void LoadScene(CommandContext& context, const std::filesystem::path& p);
-	void RenderProperties(CommandContext& context);
-	void RenderWidget(CommandContext& context, const double dt);
-	void Render(CommandContext& context);
+	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
+		renderContext.scene.Load(context, p);
+	}
+
+	inline void DrawPropertiesGui(CommandContext& context) {
+		if (ImGui::CollapsingHeader("Camera")) {
+			renderContext.camera.DrawGui();
+		}
+
+		if (ImGui::CollapsingHeader("Scene")) {
+			renderContext.scene.DrawGui(context);
+		}
+
+		if (ImGui::CollapsingHeader("Renderer")) {
+			if (renderContext.renderTarget) {
+				ImGui::Text("%u x %u", renderContext.renderTarget.Extent().x, renderContext.renderTarget.Extent().y);
+			}
+
+			if (ImGui::BeginCombo("Mode", CallRendererFn([](const auto& r) { return r.Name(); }))) {
+				auto drawComboItem = [&](const auto& r, uint32_t i) {
+					if (ImGui::Selectable(r.Name(), rendererIndex == i)) {
+						rendererIndex = i;
+					}
+				};
+				// https://stackoverflow.com/questions/78863041/getting-index-of-current-tuple-item-in-stdapply
+				[&]<std::size_t... Is>(std::index_sequence<Is...>) {
+					((drawComboItem(std::get<Is>(renderers), (uint32_t)Is)), ...);
+				}
+				( std::make_index_sequence<std::tuple_size_v<decltype(renderers)>>{} );
+				
+				ImGui::EndCombo();
+			}
+
+			CallRendererFn([&](auto& r){ r.DrawGui(context); });
+		}
+	}
+
+	void DrawWidgetGui(CommandContext& context, const double dt) {
+		const float2 extentf = std::bit_cast<float2>(ImGui::GetWindowContentRegionMax()) - std::bit_cast<float2>(ImGui::GetWindowContentRegionMin());
+		const uint2 extent = uint2(extentf);
+		if (extent.x == 0 || extent.y == 0) return;
+
+		if (!renderContext.renderTarget || renderContext.renderTarget.Extent().x != extent.x || renderContext.renderTarget.Extent().y != extent.y) {
+			renderContext.renderTarget = ImageView::Create(
+				Image::Create(context.GetDevice(), ImageInfo{
+					.format = vk::Format::eR8G8B8A8Unorm,
+					.extent = uint3(extent, 1),
+					.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage,
+					.queueFamilies = { context.QueueFamily() } }),
+				vk::ImageSubresourceRange{
+					.aspectMask = vk::ImageAspectFlagBits::eColor,
+					.baseMipLevel = 0,
+					.levelCount = 1,
+					.baseArrayLayer = 0,
+					.layerCount = 1 });
+		}
+
+		// Draw the renderTarget image to the window
+		ImGui::Image(Gui::GetTextureID(renderContext.renderTarget, vk::Filter::eNearest), std::bit_cast<ImVec2>(extentf));
+
+		renderContext.camera.Update(dt);
+
+		// render the scene into renderTarget
+		
+		if (renderContext.scene.TetCount() == 0) {
+			context.ClearColor(renderContext.renderTarget, vk::ClearColorValue{std::array<float,4>{ 0, 0, 0, 0 }});
+		} else {
+			context.PushDebugLabel("DelaunayTetRenderer::Render");
+			CallRendererFn([&](auto& r){ r.Render(context, renderContext); });
+			context.PopDebugLabel();
+		}
+	}
 };
 
 }

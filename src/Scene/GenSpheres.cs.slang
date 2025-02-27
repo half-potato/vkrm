@@ -1,5 +1,7 @@
 import TetrahedronScene;
 
+using namespace vkDelTet;
+
 ParameterBlock<TetrahedronScene> scene;
 RWStructuredBuffer<float4> outputSpheres;
 

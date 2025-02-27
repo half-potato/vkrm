@@ -1,3 +1,7 @@
+#pragma once
+
+namespace vkDelTet {
+
 struct TetrahedronScene {
     static const uint3 kTetTriangles[4] = {
         /* 
@@ -26,7 +30,8 @@ struct TetrahedronScene {
 
 	float3 aabbMin;
 	uint   numTets;
-	float3 aabbMax;
+    float3 aabbMax;
+    float  densityScale;
 
     float3 load_vertex(uint vertexId) {
         return vertices.Load<float3>(vertexId * sizeof(float3));
@@ -55,7 +60,9 @@ struct TetrahedronScene {
     }
     
     float4 load_rgb_density(uint tetId) {
-        return colors[tetId];
+        float4 c = colors[tetId];
+        c.a *= densityScale;
+        return c;
 	}
 
 };
@@ -234,4 +241,6 @@ bool intersect_ray_tetrahedron(float3 orig, float3 dir, float4x3 verts, out floa
 
     t = float2(t_enter, t_exit);
     return true;
+}
+
 }
