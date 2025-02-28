@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Rose/Core/Bitfield.h>
+
 namespace vkDelTet {
 
 struct TetrahedronScene {
@@ -24,7 +26,7 @@ struct TetrahedronScene {
     };
 
     ByteAddressBuffer        vertices;
-    StructuredBuffer<float4> colors;
+    Buffer<float4>           colors;
     ByteAddressBuffer        indices;
 	StructuredBuffer<float4> spheres;
 
@@ -33,17 +35,21 @@ struct TetrahedronScene {
     float3 aabbMax;
     float  densityScale;
 
+    uint load_index(uint tetId, uint tetVertexId) {
+        const uint idx = 4 * tetId + tetVertexId;
+        return indices.Load(idx * sizeof(uint));
+    }
+
+    uint4 load_tet_indices(uint tetId) {
+        return indices.Load4(tetId * sizeof(uint4));
+    }
+
     float3 load_vertex(uint vertexId) {
         return vertices.Load<float3>(vertexId * sizeof(float3));
     }
 
     float3 load_vertex(uint tetId, uint tetVertexId) {
-        uint vertexId = indices.Load((tetId * 4 + tetVertexId) * sizeof(uint));
-        return load_vertex(vertexId);
-    }
-    
-    uint4 load_tet_indices(uint tetId) {
-        return indices.Load4(tetId * sizeof(uint4));
+        return load_vertex(load_index(tetId, tetVertexId));
     }
 
     float4x3 load_tet_vertices(uint4 tetIndices) {
@@ -60,11 +66,10 @@ struct TetrahedronScene {
     }
     
     float4 load_rgb_density(uint tetId) {
-        float4 c = colors[tetId];
+        float4 c = colors.Load(tetId);
         c.a *= densityScale;
         return c;
 	}
-
 };
 
 bool intersect_ray_tetrahedron(float3 orig, float3 dir, float4x3 verts, out float2 t) {

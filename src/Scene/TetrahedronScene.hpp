@@ -16,8 +16,8 @@ private:
 	PipelineCache createSpheresPipeline = PipelineCache(FindShaderPath("GenSpheres.cs.slang"));
 
 	BufferRange<float3> vertices;
-	BufferRange<float4> colors;
-	BufferRange<uint4>  indices;
+	TexelBufferView     colors;
+	BufferView          indices;
 	BufferRange<float4> spheres;
 	
 	float3 sceneTranslation = float3(0);
@@ -32,11 +32,11 @@ private:
 	void ComputeSpheres(CommandContext& context);
 	
 public:
-	inline uint32_t TetCount() const { return (uint32_t)indices.size(); }
+	inline uint32_t TetCount() const { return (uint32_t)spheres.size(); }
 	inline uint32_t VertexCount() const { return (uint32_t)vertices.size(); }
 	inline float    MaxDensity() const { return maxDensity; }
 	inline float    DensityScale() const { return densityScale; }
-	inline float4x4 Transform() const { return glm::translate(sceneTranslation) * glm::toMat4(glm::quat(sceneRotation)) * float4x4(sceneScale); }
+	inline float4x4 Transform() const { return glm::translate(sceneTranslation) * glm::toMat4(glm::quat(sceneRotation)) * glm::scale(float3(sceneScale)); }
 	
 	ShaderParameter GetShaderParameter();
 

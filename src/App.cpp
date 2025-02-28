@@ -12,6 +12,18 @@ int main(int argc, const char** argv) {
 
 	DelaunayTetRenderer renderer;
 
+	auto openSceneDialog = [&]() {
+		auto f = pfd::open_file(
+			"Choose scene",
+			"",
+			{ "PLY files (.ply)", "*.ply" },
+			false
+		);
+		for (const std::string& filepath : f.result()) {
+			renderer.LoadScene(*app.contexts[app.swapchain->ImageIndex()], filepath);
+		}
+	};
+
 	if (argc > 1) {
 		app.contexts[0]->Begin();
 		renderer.LoadScene(*app.contexts[0], argv[1]);
@@ -20,15 +32,7 @@ int main(int argc, const char** argv) {
 
 	app.AddMenuItem("File", [&]() {
 		if (ImGui::MenuItem("Open scene")) {
-			auto f = pfd::open_file(
-				"Choose scene",
-				"",
-				{ "PLY files (.ply)", "*.ply" },
-				false
-			);
-			for (const std::string& filepath : f.result()) {
-				renderer.LoadScene(*app.contexts[app.swapchain->ImageIndex()], filepath);
-			}
+			openSceneDialog();
 		}
 	});
 
@@ -37,6 +41,9 @@ int main(int argc, const char** argv) {
 	}, true);
 
 	app.AddWidget("Viewport", [&]() {
+		if (ImGui::IsKeyPressed(ImGuiKey_O) && ImGui::IsKeyDown(ImGuiMod_Ctrl)) {
+			openSceneDialog();
+		}
 		renderer.DrawWidgetGui(*app.contexts[app.swapchain->ImageIndex()], app.dt);
 	}, true, WindowedApp::WidgetFlagBits::eNoBorders);
 

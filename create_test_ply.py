@@ -1,26 +1,6 @@
-import os
 import sys
 import numpy as np
-from plyfile import PlyData, PlyElement
-
-# vertices: N_verts x 3
-# colors:   N_tets x 4
-# indices:  N_tets x 4
-def save_model_ply(path:str, vertices, colors, indices):
-	pardir = os.path.dirname(path)
-	if not os.path.exists(pardir):
-		os.makedirs(pardir)
-
-	vertex_elements = np.empty(vertices.shape[0], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
-	vertex_elements[:] = list(map(tuple, vertices))
-	verts = PlyElement.describe(vertex_elements, 'vertex')
-
-	tets = np.array([ (colors[i][0], colors[i][1], colors[i][2], colors[i][3], indices[i].tolist()) for i in range(indices.shape[0]) ],
-					dtype=[ ('r', 'f4'), ('g', 'f4'), ('b', 'f4'), ('s', 'f4'), ('vertex_indices', 'O') ])
-	tets = PlyElement.describe(tets, 'tetrahedron')
-
-	PlyData([verts, tets]).write(path)
-
+from ply_model_helper import save_model_ply
 
 def gen_tets(N):
 	verts = []
@@ -34,12 +14,12 @@ def gen_tets(N):
 			verts += [ v ]
 
 		c = np.array([ 0.5, 0.5, 0.5, 40 ], dtype=np.float32)
-		c[1 + i%3] = 1.0
+		c[i%3] = 1.0
 		cols += [ c ]
 
 		tets += [ [ i*4 + 0, i*4 + 1, i*4 + 2, i*4 + 3 ] ]
 
-	return verts, cols, tets
+	return np.array(verts, dtype=np.float32), np.array(cols, dtype=np.float32), np.array(tets, dtype=np.uint32)
 
 def gen_tets_sphere(N, r=1):
 	verts = []
@@ -84,16 +64,16 @@ def gen_tets_sphere(N, r=1):
 			cols += [ c ]
 			tets += [ [ v0 + 1, v0 + 3, v0 + 2, v0 + 4 ] ]
 
-	return np.array(verts, dtype=np.float32), np.array(cols, dtype=np.float32), np.array(tets, dtype=np.float32)
+	return np.array(verts, dtype=np.float32), np.array(cols, dtype=np.float32), np.array(tets, dtype=np.uint32)
 
 if __name__ == "__main__":
 	if len(sys.argv) < 2:
 		print("Usage: python %s [path]" % sys.argv[0])
 		exit(1)
 
-	verts, cols, tets = gen_tets(5)
+	verts, cols, tets = gen_tets(2)
 	#verts, cols, tets = gen_tets_sphere((16,8), 1.0)
 
-	#print(verts)
+	print(cols)
 
 	save_model_ply(sys.argv[1], verts, cols, tets)

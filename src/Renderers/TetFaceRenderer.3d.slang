@@ -52,7 +52,7 @@ v2f vsmain(uint tetId: SV_InstanceID, uint vertexId: SV_VertexID) {
 
         #elif PRE_TRANSFORM && !TET_INTERSECTION
 
-        uint sceneVertexId = scene.indices.Load((tetId * 4 + tetVertexId) * sizeof(uint));
+        uint sceneVertexId = scene.load_index(tetId, tetVertexId);
         o.pos = float4(transformedVertices.Load<float3>(sizeof(float3) * sceneVertexId), 1);
 
         #else
