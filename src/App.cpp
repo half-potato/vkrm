@@ -7,7 +7,8 @@ using namespace vkDelTet;
 
 int main(int argc, const char** argv) {
 	WindowedApp app("DelaunayTetRenderer", {
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_EXT_MESH_SHADER_EXTENSION_NAME
 	});
 
 	DelaunayTetRenderer renderer;

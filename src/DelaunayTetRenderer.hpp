@@ -10,6 +10,7 @@
 #include "Renderers/CentroidRenderer.hpp"
 #include "Renderers/BillboardRenderer.hpp"
 #include "Renderers/TetFaceRenderer.hpp"
+#include "Renderers/MeshShaderRenderer.hpp"
 
 namespace vkDelTet {
 
@@ -18,7 +19,8 @@ private:
 	std::tuple<
 		TetFaceRenderer,
 		BillboardRenderer,
-		CentroidRenderer
+		CentroidRenderer,
+		MeshShaderRenderer
 	> renderers;
 	uint32_t rendererIndex = 0;
 
