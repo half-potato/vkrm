@@ -28,8 +28,6 @@ struct v2f {
 #define GROUP_SIZE 32
 #define TETS_PER_GROUP (GROUP_SIZE / 4)
 
-groupshared float3 groupVertices[GROUP_SIZE];
-
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(GROUP_SIZE, 1, 1)]
@@ -56,13 +54,10 @@ void meshmain(
 
         o.scenePos = vertex;
 
-        groupVertices[meshVertexId] = vertex;
-        GroupMemoryBarrierWithGroupSync();
-
-        o.v0 = groupVertices[(meshVertexId/4)*4 + 0];
-        o.v1 = groupVertices[(meshVertexId/4)*4 + 1];
-        o.v2 = groupVertices[(meshVertexId/4)*4 + 2];
-        o.v3 = groupVertices[(meshVertexId/4)*4 + 3];
+        o.v0 = WaveReadLaneAt(vertex, (WaveGetLaneIndex()/4)*4 + 0);
+        o.v1 = WaveReadLaneAt(vertex, (WaveGetLaneIndex()/4)*4 + 1);
+        o.v2 = WaveReadLaneAt(vertex, (WaveGetLaneIndex()/4)*4 + 2);
+        o.v3 = WaveReadLaneAt(vertex, (WaveGetLaneIndex()/4)*4 + 3);
 
         #else
 
