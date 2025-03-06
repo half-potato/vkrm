@@ -81,7 +81,7 @@ public:
 
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
 
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
 
         if (preTransformVertices) {
             if (!transformedVertices || transformedVertices.size() != renderContext.scene.VertexCount()) {

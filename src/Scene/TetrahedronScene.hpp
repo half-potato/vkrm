@@ -13,11 +13,13 @@ namespace vkDelTet {
 
 class TetrahedronScene {
 private:
-	PipelineCache createSpheresPipeline = PipelineCache(FindShaderPath("GenSpheres.cs.slang"));
+	PipelineCache createSpheresPipeline  = PipelineCache(FindShaderPath("GenSpheres.cs.slang"));
+	PipelineCache compressColorsPipeline = PipelineCache({ FindShaderPath("CompressColors.cs.slang"), "main" });
 
 	BufferRange<float3> vertices;
 	TexelBufferView     colors;
-	BufferView          indices;
+	TexelBufferView     densities;
+	BufferRange<uint4>  indices;
 	BufferRange<float4> spheres;
 	
 	float3 sceneTranslation = float3(0);

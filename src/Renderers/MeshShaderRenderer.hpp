@@ -4,12 +4,26 @@
 
 namespace vkDelTet {
 
+enum IntersectionMode {
+    ePerPixel,
+    ePerTet,
+    eCombined,
+    eNone,
+    eNumIntersectionModes
+};
+inline static const char* kIntersectionModeNames[] = {
+    "Per Pixel",
+    "Per Tet",
+    "Combined",
+    "None"
+};
+
 class MeshShaderRenderer { 
 private:
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
     bool  wireframe = false;
-    bool  constantDensity = false;
+    IntersectionMode intersectMode = IntersectionMode::ePerPixel;
 
     PipelineCache renderPipeline = PipelineCache({
         { FindShaderPath("MeshShaderRenderer.3d.slang"), "meshmain" },
@@ -18,7 +32,7 @@ private:
 
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
         ShaderDefines defines {
-            { "TET_INTERSECTION", constantDensity ? "0" : "1" },
+            { "INTERSECTION_MODE", std::to_string((uint32_t)intersectMode) },
         };
 
         GraphicsPipelineInfo pipelineInfo {
@@ -59,11 +73,12 @@ public:
 		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
 
         ImGui::Checkbox("Wireframe", &wireframe);
-        ImGui::Checkbox("Force constant density", &constantDensity);
+
+        Gui::EnumDropdown("Intersection mode", intersectMode, kIntersectionModeNames);
     }
 
 	void Render(CommandContext& context, RenderContext& renderContext) {
-        const uint2 extent = (uint2)renderContext.renderTarget.Extent();
+        const uint2    extent = (uint2)renderContext.renderTarget.Extent();
         const float4x4 cameraToWorld = renderContext.camera.GetCameraToWorld();
         const float4x4 sceneToWorld  = renderContext.scene.Transform();
         const float4x4 worldToScene  = inverse(sceneToWorld);
@@ -74,7 +89,7 @@ public:
 
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
 
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
 
         context.PushDebugLabel("Rasterize");
 

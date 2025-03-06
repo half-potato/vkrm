@@ -63,9 +63,9 @@ public:
         const float4x4 worldToScene = inverse(sceneToWorld);
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
 
-        const ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
+        ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
         
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
 
         context.PushDebugLabel("Rasterize");
 

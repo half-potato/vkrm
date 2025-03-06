@@ -1,6 +1,7 @@
 #include <portable-file-dialogs.h>
 #include <tinyply.h>
 
+#include <Rose/Core/DxgiFormatConvert.h>
 #include "TetrahedronScene.hpp"
 
 using namespace vkDelTet;
@@ -40,22 +41,18 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	//std::cout << "\tcol " << col[0] << std::endl;
 
 	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
-
+	
+	// pre-quantization: scale densities by tet radii
 	maxDensity = 0;
 	for (const float4 c : col)
 		maxDensity = max(maxDensity, c.w);
-
-	// compress colors
-	std::vector<glm::vec<4, uint8_t>> col32(col.size());
-	for (size_t i = 0; i < col.size(); i++) {
-		float4 c = col[i];
-		c.w /= maxDensity;
-		col32[i] = (glm::vec<4, uint8_t>)clamp(uint4(255.f * c), 0u, 0xffu);
-	}
 	
+	auto colorsf32 = context.UploadData(col, vk::BufferUsageFlagBits::eStorageBuffer);
+
 	vertices  = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	indices   = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
-	colors    = TexelBufferView::Create(context.GetDevice(), context.UploadData(col32, vk::BufferUsageFlagBits::eUniformTexelBuffer), vk::Format::eR8G8B8A8Unorm);
+	colors    = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint32_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eA2R10G10B10UnormPack32);
+	densities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
 	spheres   = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
 
 	minVertex = float3( FLT_MAX );
@@ -65,19 +62,31 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		maxVertex = max(p, maxVertex);
 	}
 
+	// compress colors and densities
+	{
+		Pipeline& pipeline = *compressColorsPipeline.get(context.GetDevice());
+		ShaderParameter parameters;
+		parameters["input"]   = (BufferParameter)colorsf32;
+		parameters["output"]  = (BufferParameter)colors.GetBuffer();
+		parameters["outputW"] = (BufferParameter)densities.GetBuffer();
+		parameters["size"] = numTets;
+		context.Dispatch(pipeline, numTets, parameters);
+	}
+
 	ComputeSpheres(context);
 }
 
 ShaderParameter TetrahedronScene::GetShaderParameter() {
 	ShaderParameter sceneParams = {};
-	sceneParams["vertices"] = (BufferParameter)vertices;
-	sceneParams["colors"]   = (TexelBufferParameter)colors;
-	sceneParams["indices"]  = (BufferParameter)indices;
-	sceneParams["spheres"]  = (BufferParameter)spheres;
-	sceneParams["numTets"]  = (uint32_t)spheres.size();
+	sceneParams["vertices"]  = (BufferParameter)vertices;
+	sceneParams["colors"]    = (TexelBufferParameter)colors;
+	sceneParams["densities"] = (TexelBufferParameter)densities;
+	sceneParams["indices"]   = (BufferParameter)indices;
+	sceneParams["spheres"]   = (BufferParameter)spheres;
+	sceneParams["numTets"]   = (uint32_t)spheres.size();
 	sceneParams["aabbMin"] = minVertex;
 	sceneParams["aabbMax"] = maxVertex;
-	sceneParams["densityScale"] = densityScale * maxDensity;
+	sceneParams["densityScale"] = densityScale;
 	return sceneParams;
 }
 

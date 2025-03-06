@@ -41,6 +41,7 @@ private:
 public:
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
+		renderContext.InitializeSort(context, renderContext.scene.GetShaderParameter());
 	}
 
 	inline void DrawPropertiesGui(CommandContext& context) {

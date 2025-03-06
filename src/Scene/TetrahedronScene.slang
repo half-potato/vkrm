@@ -1,8 +1,11 @@
 #pragma once
 
 #include <Rose/Core/Bitfield.h>
+import Rose.Core.MathUtils;
 
 namespace vkDelTet {
+
+static const float kPlaneEpsilon = 1e-10f;
 
 struct TetrahedronScene {
     static const uint3 kTetTriangles[4] = {
@@ -27,6 +30,7 @@ struct TetrahedronScene {
 
     ByteAddressBuffer        vertices;
     Buffer<float4>           colors;
+    Buffer<float>            densities;
     ByteAddressBuffer        indices;
 	StructuredBuffer<float4> spheres;
 
@@ -64,13 +68,15 @@ struct TetrahedronScene {
     float4x3 load_tet_vertices(uint tetId) { 
         return load_tet_vertices(load_tet_indices(tetId));
     }
-    
+
     float4 load_rgb_density(uint tetId) {
         float4 c = colors.Load(tetId);
-        c.a *= densityScale;
+        if (c.w > 0) c.w = densities.Load(tetId) * densityScale;
         return c;
-	}
+    }
 };
+
+#if 0
 
 bool intersect_ray_tetrahedron(float3 orig, float3 dir, float3 v0, float3 v1, float3 v2, float3 v3, out float2 t) {
     t = -1;
@@ -423,5 +429,60 @@ bool intersect_ray_tetrahedron(float3 orig, float3 dir, float4x3 verts, out floa
     t = float2(t_enter, t_exit);
     return true;
 }
+
+#else
+
+bool intersect_plane_convex_hull(const float dist, const float denom, inout float2 t) {
+    if (abs(denom) < kPlaneEpsilon) {
+        // Ray is almost parallel to plane
+        if (dist > 0) {
+            // Entire ray is outside
+            return false;
+        }
+    } else {
+        const float t_i = dist / denom;
+        if (denom > 0) {
+            // Ray entering at this t
+            if (t_i > t.x) {
+                t.x = t_i;
+            }
+        } else {
+            // Ray exiting
+            if (t_i < t.y) {
+                t.y = t_i;
+            }
+        }
+    }
+
+    if (t.x > t.y) {
+        return false;
+    }
+
+    return true;
+}
+
+bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float4x3 verts, out float2 t) {
+    t = float2(0, FLT_MAX);
+    [ForceUnroll]
+    for (uint i = 0; i < 4; i++) {
+        // outward facing normal
+        const float3 n = cross(
+            verts[TetrahedronScene::kTetTriangles[i][2]] - verts[TetrahedronScene::kTetTriangles[i][0]],
+            verts[TetrahedronScene::kTetTriangles[i][1]] - verts[TetrahedronScene::kTetTriangles[i][0]]);
+
+        const float dist  = dot(n, verts[TetrahedronScene::kTetTriangles[i][0]] - orig);
+        const float denom = dot(n, dir);
+
+        if (!intersect_plane_convex_hull(dist, denom, t))
+            return false;
+    }
+    return true;
+}
+
+bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float3 v0, const float3 v1, const float3 v2, const float3 v3, out float2 t) {
+    return intersect_ray_tetrahedron(orig, dir, float4x3(v0, v1, v2, v3), t);
+}
+
+#endif
 
 }
