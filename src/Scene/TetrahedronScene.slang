@@ -5,39 +5,59 @@ import Rose.Core.MathUtils;
 
 namespace vkDelTet {
 
+using namespace RoseEngine;
+
 static const float kPlaneEpsilon = 1e-10f;
 
 struct TetrahedronScene {
     static const uint3 kTetTriangles[4] = {
-        /* 
-        *    y
-        *    ^
-        *    |
-        *    *v2    z
-        *    |     /
-        *    |    *v3
-        *    |   /
-        *    |  /
-        *    | /          v1
-        *    v0------------*--->x
-        *                 
-        */
+        /*
+         *    y
+         *    ^
+         *    |
+         *    *v2    z
+         *    |     /
+         *    |    *v3
+         *    |   /
+         *    |  /
+         *    | /          v1
+         *    v0------------*--->x
+         *
+         */
         uint3(0, 2, 1),
         uint3(1, 2, 3),
         uint3(0, 3, 2),
         uint3(3, 0, 1),
     };
 
+    struct TetrahedronLight {
+        float3 color;
+        float  roughness;
+        float3 direction;
+
+        float3 eval(const float3 viewDir) {
+            const float f = max(0, dot(direction, viewDir));
+            return color * pow(f, roughness);
+        }
+    };
+
     ByteAddressBuffer        vertices;
+    ByteAddressBuffer        indices;
+    
     Buffer<float4>           colors;
     Buffer<float>            densities;
-    ByteAddressBuffer        indices;
+    
+    Buffer<float4>           lightColors;
+    Buffer<float2>           lightDirections;
+
 	StructuredBuffer<float4> spheres;
 
 	float3 aabbMin;
 	uint   numTets;
     float3 aabbMax;
     float  densityScale;
+
+    uint numLights;
 
     uint load_index(uint tetId, uint tetVertexId) {
         const uint idx = 4 * tetId + tetVertexId;
@@ -74,7 +94,29 @@ struct TetrahedronScene {
         if (c.w > 0) c.w = densities.Load(tetId) * densityScale;
         return c;
     }
+
+    TetrahedronLight load_light(uint tetId, uint lightId) {
+        const uint i = tetId * numLights + lightId;
+        const float4 c = lightColors.Load(i);
+        TetrahedronLight l;
+        l.color     = c.rgb;
+        l.roughness = c.a;
+
+        const float2 sph = lightDirections.Load(i);
+        const float sinTheta = sin(sph.y);
+        l.direction = float3(
+            cos(sph.x) * sinTheta,
+            sin(sph.x) * sinTheta,
+            cos(sph.y)
+        );
+        return l;
+    }
 };
+
+float4 EvalTetColor(const float4 tetColor, const float dt = 1) {
+    const float T = exp(-dt * tetColor.a);
+    return float4((1 - T) * tetColor.rgb, T);
+}
 
 #if 0
 

@@ -41,6 +41,5 @@ v2f vsmain(uint tetId : SV_VertexID) {
 
 [shader("fragment")]
 float4 fsmain(float4 color : COLOR) : SV_Target {
-    float T = exp(-color.a);
-    return float4((1 - T) * color.rgb, T);
+    return EvalTetColor(color);
 }

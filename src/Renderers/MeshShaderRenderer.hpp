@@ -23,6 +23,7 @@ private:
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
     bool  wireframe = false;
+    bool  lighting = false;
     IntersectionMode intersectMode = IntersectionMode::ePerPixel;
 
     PipelineCache renderPipeline = PipelineCache({
@@ -33,6 +34,7 @@ private:
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
         ShaderDefines defines {
             { "INTERSECTION_MODE", std::to_string((uint32_t)intersectMode) },
+            { "EVAL_TET_LIGHTS", lighting ? "1" : "0" }
         };
 
         GraphicsPipelineInfo pipelineInfo {
@@ -73,6 +75,7 @@ public:
 		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
 
         ImGui::Checkbox("Wireframe", &wireframe);
+        ImGui::Checkbox("Lighting", &lighting);
 
         Gui::EnumDropdown("Intersection mode", intersectMode, kIntersectionModeNames);
     }

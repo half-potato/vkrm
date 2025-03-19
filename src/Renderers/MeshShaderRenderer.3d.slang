@@ -13,6 +13,10 @@ import SortUtils;
 #define INTERSECTION_MODE INTERSECTION_MODE_COMBINED
 #endif
 
+#ifndef EVAL_TET_LIGHTS
+#define EVAL_TET_LIGHTS 1
+#endif
+
 #include <Rose/Core/Bitfield.h>
 
 using namespace vkDelTet;
@@ -28,15 +32,15 @@ uniform float    densityThreshold;
 struct v2f {
     float4 pos : SV_Position;
 
-    [[vk::location(0)]] float4 tetColor : COLOR;
+    [[vk::location(0)]] nointerpolation float4 tetColor : COLOR;
 
     #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
     
     [[vk::location(1)]] float3 scenePos;
-    [[vk::location(2)]] float3 v0;
-    [[vk::location(3)]] float3 v1;
-    [[vk::location(4)]] float3 v2;
-    [[vk::location(5)]] float3 v3;
+    [[vk::location(2)]] nointerpolation float3 v0;
+    [[vk::location(3)]] nointerpolation float3 v1;
+    [[vk::location(4)]] nointerpolation float3 v2;
+    [[vk::location(5)]] nointerpolation float3 v3;
     
     #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
     
@@ -77,6 +81,9 @@ void meshmain(
         #define WaveReadTetVar(x, id)        WaveReadLaneAt(x, baseLaneId + id)
         #define WaveReadTetVarRel(x, offset) WaveReadTetVar(x, (WaveGetLaneIndex() + offset) % 4)
 
+        const float3 centroid = (WaveReadTetVarRel(vertex, 0) + WaveReadTetVarRel(vertex, 1) + WaveReadTetVarRel(vertex, 2)) / 3.0;
+        const float3 rayDir = normalize(centroid - rayOrigin);
+        
         #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
         {
             o.scenePos = vertex;
@@ -90,12 +97,10 @@ void meshmain(
         {
             // constant color, scale density by tet thickness
 
-            const float3 centroid = (WaveReadTetVarRel(vertex, 0) + WaveReadTetVarRel(vertex, 1) + WaveReadTetVarRel(vertex, 2)) / 3.0;
-            
             float2 t;
             if (!intersect_ray_tetrahedron(
                 rayOrigin,
-                normalize(centroid  - rayOrigin),
+                rayDir,
                 WaveReadTetVar(vertex, 0),
                 WaveReadTetVar(vertex, 1),
                 WaveReadTetVar(vertex, 2),
@@ -107,33 +112,15 @@ void meshmain(
             const float thickness = t.y - max(0, t.x);
 
             const float d = (WaveReadTetVar(thickness, 0) +
-                            WaveReadTetVar(thickness, 1) +
-                            WaveReadTetVar(thickness, 2) +
-                            WaveReadTetVar(thickness, 3)) / 4.0;
+                             WaveReadTetVar(thickness, 1) +
+                             WaveReadTetVar(thickness, 2) +
+                             WaveReadTetVar(thickness, 3)) / 4.0;
 
             o.tetColor.w *= d;
         }
         #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
         {
             o.rayDir = vertex - rayOrigin;
-
-            #if 0
-
-            [ForceUnroll]
-            for (uint i = 0; i < 4; i++)
-            {
-                const uint3 tri = TetrahedronScene::kTetTriangles[i];
-
-                // outward facing normal
-                const float3 n = cross(
-                    WaveReadTetVar(vertex, tri[2]) - WaveReadTetVar(vertex, tri[0]),
-                    WaveReadTetVar(vertex, tri[1]) - WaveReadTetVar(vertex, tri[0]));
-
-                o.planeNumerators[i]   = dot(n, WaveReadTetVar(vertex, tri[0]) - rayOrigin);
-                o.planeDenominators[i] = dot(n, o.rayDir);
-            }
-
-            #else
 
             const uint3 tri = TetrahedronScene::kTetTriangles[tetVertexId];
 
@@ -154,13 +141,25 @@ void meshmain(
                 dot(WaveReadTetVar(n, 1), o.rayDir),
                 dot(WaveReadTetVar(n, 2), o.rayDir),
                 dot(WaveReadTetVar(n, 3), o.rayDir) );
-            
-            #endif
         }
         #else // if INTERSECTION_MODE == INTERSECTION_MODE_NONE
 
         // constant color, scale density by circumcenter diameter
         o.tetColor.w *= 2*scene.spheres[tetId].w;
+
+        #endif
+
+
+        #if EVAL_TET_LIGHTS
+
+        float3 lightColor = 0;
+        if (tetVertexId < scene.numLights)
+            lightColor = scene.load_light(tetId, tetVertexId).eval(-rayDir);
+
+        o.tetColor.rgb += WaveReadTetVar(lightColor, 0);
+        o.tetColor.rgb += WaveReadTetVar(lightColor, 1);
+        o.tetColor.rgb += WaveReadTetVar(lightColor, 2);
+        o.tetColor.rgb += WaveReadTetVar(lightColor, 3);
 
         #endif
     }
@@ -174,6 +173,7 @@ float4 fsmain(v2f v) : SV_Target {
     float4 c = v.tetColor;
 
     #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
+    
     {
         float2 t;
         if (intersect_ray_tetrahedron(rayOrigin, normalize(v.scenePos - rayOrigin), v.v0, v.v1, v.v2, v.v3, t)) {
@@ -184,6 +184,7 @@ float4 fsmain(v2f v) : SV_Target {
         } else
             c.a = 0;
     }
+
     #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
     
     // normalize ray direction
@@ -208,6 +209,5 @@ float4 fsmain(v2f v) : SV_Target {
 
     #endif
 
-    const float T = exp(-c.a);
-    return float4((1 - T) * c.rgb, T);
+    return EvalTetColor(c);
 }

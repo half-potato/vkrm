@@ -71,8 +71,7 @@ float4 fsmain(v2f i) : SV_Target {
     if (intersect_ray_tetrahedron(rayOrigin, rayDirection, i.tetVerts, t)) {
         if (t.y > 0) {
             float dt = t.y - max(t.x, 0);
-            float T = exp(-dt * i.color.a);
-            fragColor = float4((1 - T) * i.color.rgb, T);
+            fragColor = EvalTetColor(i.color, dt);
         }
     }
 

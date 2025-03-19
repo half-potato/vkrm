@@ -114,10 +114,8 @@ float4 fsmain(v2f i) : SV_Target {
 
     #endif
 
-    if (dt > 0) {
-        const float T = exp(-dt * i.color.a);
-        fragColor = float4((1 - T) * i.color.rgb, T);
-    }
+    if (dt > 0)
+        fragColor = EvalTetColor(i.color, dt);
 
     return fragColor;
 }

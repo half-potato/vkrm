@@ -16,11 +16,13 @@ private:
 	PipelineCache createSpheresPipeline  = PipelineCache(FindShaderPath("GenSpheres.cs.slang"));
 	PipelineCache compressColorsPipeline = PipelineCache({ FindShaderPath("CompressColors.cs.slang"), "main" });
 
-	BufferRange<float3> vertices;
-	TexelBufferView     colors;
-	TexelBufferView     densities;
-	BufferRange<uint4>  indices;
-	BufferRange<float4> spheres;
+	BufferRange<float3>   vertices;
+	TexelBufferView       colors;
+	TexelBufferView       densities;
+	BufferRange<uint4>    indices;
+	BufferRange<float4>   spheres;
+	TexelBufferView       lightColors;
+	TexelBufferView       lightDirections;
 	
 	float3 sceneTranslation = float3(0);
 	float3 sceneRotation = float3(0);
@@ -30,6 +32,8 @@ private:
 	float3 minVertex;
 	float3 maxVertex;
 	float  maxDensity = 0.f;
+
+	uint32_t numLights = 0;
 
 	void ComputeSpheres(CommandContext& context);
 	
