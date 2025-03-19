@@ -2,6 +2,7 @@ import Rose.Core.MathUtils;
 import Rose.Core.Quaternion;
 import Scene.TetrahedronScene;
 import SortUtils;
+import Rose.Core.PackedTypes;
 
 
 #define INTERSECTION_MODE_PER_PIXEL 0
@@ -20,10 +21,11 @@ import SortUtils;
 #include <Rose/Core/Bitfield.h>
 
 using namespace vkDelTet;
+using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
 StructuredBuffer<uint2> sortBuffer;
-ByteAddressBuffer       transformedVertices;
+Buffer<float4> vertexColors;
 
 uniform float4x4 viewProjection;
 uniform float3   rayOrigin;
@@ -32,23 +34,25 @@ uniform float    densityThreshold;
 struct v2f {
     float4 pos : SV_Position;
 
-    [[vk::location(0)]] nointerpolation float4 tetColor : COLOR;
+    [[vk::location(0)]] float3 rayDir;
+    [[vk::location(1)]] float4 planeNumerators;
+    [[vk::location(2)]] float4 planeDenominators;
 
-    #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
-    
-    [[vk::location(1)]] float3 scenePos;
-    [[vk::location(2)]] nointerpolation float3 v0;
-    [[vk::location(3)]] nointerpolation float3 v1;
-    [[vk::location(4)]] nointerpolation float3 v2;
-    [[vk::location(5)]] nointerpolation float3 v3;
-    
-    #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
-    
-    [[vk::location(1)]] float3 rayDir;
-    [[vk::location(2)]] float4 planeNumerators;
-    [[vk::location(3)]] float4 planeDenominators;
-    
+    [[vk::location(3)]] nointerpolation float tetDensity : COLOR;
+
+    [[vk::location(4)]]  nointerpolation float3 v0;
+    [[vk::location(5)]]  nointerpolation float3 v1;
+    [[vk::location(6)]]  nointerpolation float3 v2;
+    [[vk::location(7)]]  nointerpolation float3 v3;
+    [[vk::location(8)]]  nointerpolation float3 c0;
+    [[vk::location(9)]]  nointerpolation float3 c1;
+    [[vk::location(10)]] nointerpolation float3 c2;
+    [[vk::location(11)]] nointerpolation float3 c3;
+
+    #if EVAL_TET_LIGHTS
+    [[vk::location(12)]] nointerpolation uint4 tet;
     #endif
+    
 };
 
 #define GROUP_SIZE 32
@@ -71,96 +75,52 @@ void meshmain(
 
     v2f o = {};
     o.pos = 0;
-    o.tetColor = scene.load_rgb_density(tetId);
-    if (o.tetColor.a > densityThreshold) {
-        const float3 vertex = scene.load_vertex(scene.load_index(tetId, tetVertexId));
+    o.tetDensity = scene.load_tet_density(tetId);
+    if (o.tetDensity > densityThreshold) {
+        const uint vertexId = scene.load_index(tetId, tetVertexId);
+        const float3 vertex = scene.load_vertex(vertexId);
         o.pos = mul(viewProjection, float4(vertex, 1));
+        o.rayDir = vertex - rayOrigin;
 
         const uint baseLaneId = (WaveGetLaneIndex() / 4) * 4;
 
         #define WaveReadTetVar(x, id)        WaveReadLaneAt(x, baseLaneId + id)
         #define WaveReadTetVarRel(x, offset) WaveReadTetVar(x, (WaveGetLaneIndex() + offset) % 4)
 
-        const float3 centroid = (WaveReadTetVarRel(vertex, 0) + WaveReadTetVarRel(vertex, 1) + WaveReadTetVarRel(vertex, 2)) / 3.0;
-        const float3 rayDir = normalize(centroid - rayOrigin);
-        
-        #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
-        {
-            o.scenePos = vertex;
+        const uint3 tri = TetrahedronScene::kTetTriangles[tetVertexId];
 
-            o.v0 = WaveReadTetVar(vertex, 0);
-            o.v1 = WaveReadTetVar(vertex, 1);
-            o.v2 = WaveReadTetVar(vertex, 2);
-            o.v3 = WaveReadTetVar(vertex, 3);
-        }
-        #elif INTERSECTION_MODE == INTERSECTION_MODE_PER_TET
-        {
-            // constant color, scale density by tet thickness
+        // outward facing normal
+        const float3 n = cross(
+            WaveReadTetVar(vertex, tri[2]) - WaveReadTetVar(vertex, tri[0]),
+            WaveReadTetVar(vertex, tri[1]) - WaveReadTetVar(vertex, tri[0]));
 
-            float2 t;
-            if (!intersect_ray_tetrahedron(
-                rayOrigin,
-                rayDir,
-                WaveReadTetVar(vertex, 0),
-                WaveReadTetVar(vertex, 1),
-                WaveReadTetVar(vertex, 2),
-                WaveReadTetVar(vertex, 3),
-                t))
-                t = 0;
+        const float num = dot(n, WaveReadTetVar(vertex, tri[0]) - rayOrigin);
 
-            // thickness = distance between vertex and plane opposite from vertex
-            const float thickness = t.y - max(0, t.x);
+        o.planeNumerators = float4(
+            WaveReadTetVar(num, 0),
+            WaveReadTetVar(num, 1),
+            WaveReadTetVar(num, 2),
+            WaveReadTetVar(num, 3) );
+        o.planeDenominators = float4(
+            dot(WaveReadTetVar(n, 0), o.rayDir),
+            dot(WaveReadTetVar(n, 1), o.rayDir),
+            dot(WaveReadTetVar(n, 2), o.rayDir),
+            dot(WaveReadTetVar(n, 3), o.rayDir) );
 
-            const float d = (WaveReadTetVar(thickness, 0) +
-                             WaveReadTetVar(thickness, 1) +
-                             WaveReadTetVar(thickness, 2) +
-                             WaveReadTetVar(thickness, 3)) / 4.0;
+        o.v0 = WaveReadTetVar(vertex, 0);
+        o.v1 = WaveReadTetVar(vertex, 1);
+        o.v2 = WaveReadTetVar(vertex, 2);
+        o.v3 = WaveReadTetVar(vertex, 3);
 
-            o.tetColor.w *= d;
-        }
-        #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
-        {
-            o.rayDir = vertex - rayOrigin;
+        const float3 color = vertexColors.Load(vertexId).rgb;
 
-            const uint3 tri = TetrahedronScene::kTetTriangles[tetVertexId];
-
-            // outward facing normal
-            const float3 n = cross(
-                WaveReadTetVar(vertex, tri[2]) - WaveReadTetVar(vertex, tri[0]),
-                WaveReadTetVar(vertex, tri[1]) - WaveReadTetVar(vertex, tri[0]));
-
-            const float num = dot(n, WaveReadTetVar(vertex, tri[0]) - rayOrigin);
-
-            o.planeNumerators = float4(
-                WaveReadTetVar(num, 0),
-                WaveReadTetVar(num, 1),
-                WaveReadTetVar(num, 2),
-                WaveReadTetVar(num, 3) );
-            o.planeDenominators = float4(
-                dot(WaveReadTetVar(n, 0), o.rayDir),
-                dot(WaveReadTetVar(n, 1), o.rayDir),
-                dot(WaveReadTetVar(n, 2), o.rayDir),
-                dot(WaveReadTetVar(n, 3), o.rayDir) );
-        }
-        #else // if INTERSECTION_MODE == INTERSECTION_MODE_NONE
-
-        // constant color, scale density by circumcenter diameter
-        o.tetColor.w *= 2*scene.spheres[tetId].w;
-
-        #endif
-
+        o.c0 = WaveReadTetVar(color, 0);
+        o.c1 = WaveReadTetVar(color, 1);
+        o.c2 = WaveReadTetVar(color, 2);
+        o.c3 = WaveReadTetVar(color, 3);
 
         #if EVAL_TET_LIGHTS
-
-        float3 lightColor = 0;
-        if (tetVertexId < scene.numLights)
-            lightColor = scene.load_light(tetId, tetVertexId).eval(-rayDir);
-
-        o.tetColor.rgb += WaveReadTetVar(lightColor, 0);
-        o.tetColor.rgb += WaveReadTetVar(lightColor, 1);
-        o.tetColor.rgb += WaveReadTetVar(lightColor, 2);
-        o.tetColor.rgb += WaveReadTetVar(lightColor, 3);
-
+        o.tet = scene.load_tet_indices(tetId);
         #endif
     }
 
@@ -170,23 +130,8 @@ void meshmain(
 
 [shader("fragment")]
 float4 fsmain(v2f v) : SV_Target {
-    float4 c = v.tetColor;
-
-    #if INTERSECTION_MODE == INTERSECTION_MODE_PER_PIXEL
-    
-    {
-        float2 t;
-        if (intersect_ray_tetrahedron(rayOrigin, normalize(v.scenePos - rayOrigin), v.v0, v.v1, v.v2, v.v3, t)) {
-            if (t.y > 0) {
-                c.a *= t.y - max(t.x, 0);
-            } else
-                c.a = 0;
-        } else
-            c.a = 0;
-    }
-
-    #elif INTERSECTION_MODE == INTERSECTION_MODE_COMBINED
-    
+    if (v.tetDensity <= densityThreshold)
+        return float4(0,0,0,1);
     // normalize ray direction
     {
         const float d = length(v.rayDir);
@@ -196,18 +141,47 @@ float4 fsmain(v2f v) : SV_Target {
 
     // intersect every plane
 
+    float opticalDepth = v.tetDensity;
+
     float2 t = float2(0, FLT_MAX);
     [ForceUnroll]
     for (uint i = 0; i < 4; i++) {
         if (!intersect_plane_convex_hull(v.planeNumerators[i], v.planeDenominators[i], t)) {
-            c.a = 0;
+            opticalDepth = 0;
             t = -1;
             break;
         }
     }
-    if (t.y > 0) c.a *= t.y - max(t.x, 0);
+    if (t.y <= 0) return 0; // this shouldnt be possible
+    opticalDepth *= t.y - max(t.x, 0);
+
+    float T = exp(-opticalDepth);
+
+    #if 0
+
+    // constant color
+    
+    float3 base_color = .25*(v.c0 + v.c1 + v.c2 + v.c3) * (1 - T);
+
+    #else
+
+    // interpolated color
+
+    float3x3 invB = inverse(transpose(float3x3(v.v0 - v.v3, v.v1 - v.v3, v.v2 - v.v3)));
+    float3 uvw_enter = mul(invB, (rayOrigin - v.v3) + t.x * v.rayDir);
+    float3 uvw_exit  = mul(invB, (rayOrigin - v.v3) + t.y * v.rayDir);
+
+    float  w_enter = saturate(1 - uvw_enter.x - uvw_enter.y - uvw_enter.z);
+    float4 b_enter = float4(uvw_enter, w_enter);
+    float3 c_enter = v.c0 * b_enter.x + v.c1 * b_enter.y + v.c2 * b_enter.z + v.c3 * b_enter.w;
+    
+    float  w_exit  = saturate(1 - uvw_exit.x -  uvw_exit.y -  uvw_exit.z);
+    float4 b_exit = float4(uvw_exit,  w_exit);
+    float3 c_exit = v.c0 * b_exit.x  + v.c1 * b_exit.y  + v.c2 * b_exit.z  + v.c3 * b_exit.w;
+
+    float3 base_color = ((-opticalDepth*T + 1 - T)*c_exit + (opticalDepth-1 + T)*c_enter) / opticalDepth;
 
     #endif
 
-    return EvalTetColor(c);
+    return float4(base_color, T);
 }

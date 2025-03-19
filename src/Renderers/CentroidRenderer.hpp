@@ -65,7 +65,7 @@ public:
 
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
         
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
 
         context.PushDebugLabel("Rasterize");
 

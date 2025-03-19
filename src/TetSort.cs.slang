@@ -30,7 +30,7 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
 
     const uint tetId = threadId.x;//sortPairs[threadId.x].y;
 
-    const float4 sphere = scene.spheres[tetId];
+    const float4 sphere = scene.tetCircumspheres[tetId];
     const float3 toSphere = sphere.xyz - rayOrigin;
     const float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
 
@@ -45,9 +45,9 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
 [numthreads(64, 1, 1)]
 void reorderTets(uint3 threadId: SV_DispatchThreadID) {
     if (threadId.x >= scene.numTets)
-        return;
+        return;/*
     const uint tetId = sortPairs[threadId.x].y;
-    sortedColors.Store(threadId.x, scene.colors.Load(tetId));
-    sortedIndices[threadId.x] = scene.indices.Load4(tetId*sizeof(uint4));
-    sortedSpheres[threadId.x] = scene.spheres[tetId];
+    sortedColors.Store(threadId.x, scene.vertexColors.Load(tetId));
+    sortedIndices[threadId.x] = scene.tetIndices.Load4(tetId*sizeof(uint4));
+    sortedSpheres[threadId.x] = scene.tetCircumspheres[tetId];*/
 }

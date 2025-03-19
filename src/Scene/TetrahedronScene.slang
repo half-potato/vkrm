@@ -30,42 +30,27 @@ struct TetrahedronScene {
         uint3(3, 0, 1),
     };
 
-    struct TetrahedronLight {
-        float3 color;
-        float  roughness;
-        float3 direction;
-
-        float3 eval(const float3 viewDir) {
-            const float f = max(0, dot(direction, viewDir));
-            return color * pow(f, roughness);
-        }
-    };
-
     ByteAddressBuffer        vertices;
-    ByteAddressBuffer        indices;
-    
-    Buffer<float4>           colors;
-    Buffer<float>            densities;
-    
-    Buffer<float4>           lightColors;
-    Buffer<float2>           lightDirections;
-
-	StructuredBuffer<float4> spheres;
+    Buffer<float>            vertexSH;
+    ByteAddressBuffer        tetIndices;
+    Buffer<float>            tetDensities;
+    StructuredBuffer<float4> tetCircumspheres;
 
 	float3 aabbMin;
 	uint   numTets;
     float3 aabbMax;
     float  densityScale;
 
-    uint numLights;
+    uint numVertices;
+    uint vertexSHDegree;
 
     uint load_index(uint tetId, uint tetVertexId) {
         const uint idx = 4 * tetId + tetVertexId;
-        return indices.Load(idx * sizeof(uint));
+        return tetIndices.Load(idx * sizeof(uint));
     }
 
     uint4 load_tet_indices(uint tetId) {
-        return indices.Load4(tetId * sizeof(uint4));
+        return tetIndices.Load4(tetId * sizeof(uint4));
     }
 
     float3 load_vertex(uint vertexId) {
@@ -89,27 +74,8 @@ struct TetrahedronScene {
         return load_tet_vertices(load_tet_indices(tetId));
     }
 
-    float4 load_rgb_density(uint tetId) {
-        float4 c = colors.Load(tetId);
-        if (c.w > 0) c.w = densities.Load(tetId) * densityScale;
-        return c;
-    }
-
-    TetrahedronLight load_light(uint tetId, uint lightId) {
-        const uint i = tetId * numLights + lightId;
-        const float4 c = lightColors.Load(i);
-        TetrahedronLight l;
-        l.color     = c.rgb;
-        l.roughness = c.a;
-
-        const float2 sph = lightDirections.Load(i);
-        const float sinTheta = sin(sph.y);
-        l.direction = float3(
-            cos(sph.x) * sinTheta,
-            sin(sph.x) * sinTheta,
-            cos(sph.y)
-        );
-        return l;
+    float load_tet_density(uint tetId) {
+        return tetDensities.Load(tetId) * densityScale;
     }
 };
 

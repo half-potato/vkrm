@@ -22,7 +22,7 @@ private:
 		CentroidRenderer,
 		MeshShaderRenderer
 	> renderers;
-	uint32_t rendererIndex = 0;
+	uint32_t rendererIndex = 3;
 
 	RenderContext renderContext;
 
@@ -41,12 +41,12 @@ private:
 public:
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
-		renderContext.InitializeSort(context, renderContext.scene.GetShaderParameter());
+		renderContext.PrepareScene(context, renderContext.scene.GetShaderParameter());
 	}
 
 	inline void DrawPropertiesGui(CommandContext& context) {
 		if (ImGui::CollapsingHeader("Camera")) {
-			renderContext.camera.DrawGui();
+			renderContext.camera.DrawInspectorGui();
 		}
 
 		if (ImGui::CollapsingHeader("Scene")) {

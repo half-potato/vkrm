@@ -23,8 +23,9 @@ private:
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
     bool  wireframe = false;
-    bool  lighting = false;
     IntersectionMode intersectMode = IntersectionMode::ePerPixel;
+
+    TexelBufferView vertexColors;
 
     PipelineCache renderPipeline = PipelineCache({
         { FindShaderPath("MeshShaderRenderer.3d.slang"), "meshmain" },
@@ -75,7 +76,6 @@ public:
 		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
 
         ImGui::Checkbox("Wireframe", &wireframe);
-        ImGui::Checkbox("Lighting", &lighting);
 
         Gui::EnumDropdown("Intersection mode", intersectMode, kIntersectionModeNames);
     }
@@ -89,10 +89,12 @@ public:
         const float4x4 projection = renderContext.camera.GetProjection((float)extent.x / (float)extent.y);
         const float4x4 viewProjection = projection * sceneToCamera;
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
-
+        
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
+        
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
 
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
+        renderContext.ComputeVertexColors(context, sceneParams, rayOrigin);
 
         context.PushDebugLabel("Rasterize");
 
@@ -104,6 +106,7 @@ public:
             ShaderParameter params = {};
             params["scene"] = sceneParams;
             params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
+            params["vertexColors"] = (TexelBufferParameter)renderContext.vertexColors;
             params["viewProjection"] = viewProjection;
             params["rayOrigin"] = rayOrigin;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();

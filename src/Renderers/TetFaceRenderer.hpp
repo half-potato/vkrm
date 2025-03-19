@@ -79,9 +79,11 @@ public:
         const float4x4 viewProjection = projection * sceneToCamera;
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
 
+        return;
+
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
 
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
 
         if (preTransformVertices) {
             if (!transformedVertices || transformedVertices.size() != renderContext.scene.VertexCount()) {
@@ -109,7 +111,7 @@ public:
             params["transformedVertices"] = (BufferParameter)transformedVertices;
             params["viewProjection"] = viewProjection;
             params["invProjection"] = inverse(projection);
-            params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.Rotation()));
+            params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.GetRotation()));
             params["rayOrigin"] = rayOrigin;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
             params["outputResolution"] = (float2)extent;

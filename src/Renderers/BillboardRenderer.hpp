@@ -64,7 +64,7 @@ public:
 
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
 
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin, false);
+        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
 
         context.PushDebugLabel("Rasterize");
 
@@ -81,7 +81,7 @@ public:
             params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
             params["viewProjection"] = projection * sceneToCamera;
             params["invProjection"] = inverse(projection);
-            params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.Rotation()));
+            params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.GetRotation()));
             params["rayOrigin"] = rayOrigin;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
             params["outputResolution"] = (float2)extent;

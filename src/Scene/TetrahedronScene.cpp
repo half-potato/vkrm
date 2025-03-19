@@ -2,6 +2,7 @@
 #include <tinyply.h>
 
 #include <Rose/Core/DxgiFormatConvert.h>
+#include <Rose/Core/Gui.hpp>
 #include "TetrahedronScene.hpp"
 
 using namespace vkDelTet;
@@ -9,9 +10,9 @@ using namespace vkDelTet;
 void TetrahedronScene::ComputeSpheres(CommandContext& context) {
 	ShaderParameter parameters = {};
 	parameters["scene"] = GetShaderParameter();
-	parameters["outputSpheres"] = (BufferParameter)spheres;
+	parameters["outputSpheres"] = (BufferParameter)tetCircumspheres;
 
-	context.Dispatch(*createSpheresPipeline.get(context.GetDevice()), (uint32_t)spheres.size(), parameters);
+	context.Dispatch(*createSpheresPipeline.get(context.GetDevice()), (uint32_t)tetCircumspheres.size(), parameters);
 }
 
 void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path& p) {
@@ -25,88 +26,64 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	ply.parse_header(file);
 	const auto elements = ply.get_elements();
 
-	if (std::ranges::find(elements, "vertex", &tinyply::PlyElement::name) == elements.end()) {
+	auto vert_it = std::ranges::find(elements, "vertex", &tinyply::PlyElement::name);
+	if (vert_it == elements.end()) {
 		std::cerr << "No vertex element in ply file." << std::endl;
 		return;
 	}
-
-	auto tet_it = std::ranges::find(elements, "tetrahedron", &tinyply::PlyElement::name);
-	if (tet_it == elements.end()) {
+	if (std::ranges::find(elements, "tetrahedron", &tinyply::PlyElement::name) == elements.end()) {
 		std::cerr << "No tetrahedron element in ply file." << std::endl;
 		return;
 	}
 
-	// find light properties, if any
-	std::vector<std::shared_ptr<tinyply::PlyData>> ply_lights;
-	const auto& tet_element = *tet_it;
-	for (const auto& prop : tet_element.properties) {
-		if (prop.name[0] != 'l')
+	vertexSHDegree = 0;
+	for (const auto& prop : vert_it->properties) {
+		if (!prop.name.starts_with("sh_"))
 			continue;
-		const size_t o = prop.name.find('_');
-		if (o == std::string::npos)
-			continue;
-		
-		const uint32_t lightIndex = std::stoi(prop.name.substr(1, o-1));
-		if (ply_lights.size() <= lightIndex)
-			ply_lights.resize(lightIndex+1);
+		uint32_t sh_i;
+		if (sscanf(prop.name.c_str(), "sh_%u", &sh_i) > 0)
+			vertexSHDegree = max(vertexSHDegree, sh_i+1);
 	}
 
-	numLights = (uint32_t)ply_lights.size();
+	if (vertexSHDegree == 0) {
+		std::cerr << "No vertex colors in ply file." << std::endl;
+		return;
+	}
 
-	std::vector<std::string> lightColorProps;
-	std::vector<std::string> lightDirectionProps;
-	lightColorProps.reserve(numLights*4);
-	lightDirectionProps.reserve(numLights*2);
-	for (uint32_t i = 0; i < ply_lights.size(); i++) {
-		const auto s = std::to_string(i);
-		lightColorProps.emplace_back("l" + s + "_r");
-		lightColorProps.emplace_back("l" + s + "_g");
-		lightColorProps.emplace_back("l" + s + "_b");
-		lightColorProps.emplace_back("l" + s + "_roughness");
-		lightDirectionProps.emplace_back("l" + s + "_phi");
-		lightDirectionProps.emplace_back("l" + s + "_theta");
+	std::vector<std::string> vertexSHProps;
+	vertexSHProps.reserve(vertexSHDegree*3);
+	for (uint32_t i = 0; i < vertexSHDegree; i++) {
+		const auto li = "sh_" + std::to_string(i) + "_";
+		vertexSHProps.emplace_back(li + "r");
+		vertexSHProps.emplace_back(li + "g");
+		vertexSHProps.emplace_back(li + "b");
 	}
 	
-	auto ply_vertices    = ply.request_properties_from_element("vertex",      { "x", "y", "z" });
-	auto ply_tet_colors  = ply.request_properties_from_element("tetrahedron", { "r", "g", "b", "s" });
-	auto ply_tet_indices = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
-	auto ply_tet_light_colors     = numLights == 0 ? std::shared_ptr<tinyply::PlyData>{} : ply.request_properties_from_element("tetrahedron", lightColorProps);
-	auto ply_tet_light_directions = numLights == 0 ? std::shared_ptr<tinyply::PlyData>{} : ply.request_properties_from_element("tetrahedron", lightDirectionProps);
+	auto ply_vertices      = ply.request_properties_from_element("vertex", { "x", "y", "z" });
+	auto ply_vertex_sh     = ply.request_properties_from_element("vertex", vertexSHProps);
+	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
+	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "density" });
 
 	ply.read(file);
 
-	std::span pos  {reinterpret_cast<float3*>(ply_vertices->buffer.get()),    ply_vertices->buffer.size_bytes()/sizeof(float3)};
-	std::span col  {reinterpret_cast<float4*>(ply_tet_colors ->buffer.get()), ply_tet_colors ->buffer.size_bytes()/sizeof(float4)};
-	std::span inds {reinterpret_cast<uint4* >(ply_tet_indices->buffer.get()), ply_tet_indices->buffer.size_bytes()/sizeof(uint4)};
-	std::span lightCol = numLights == 0 ? std::span<float4>{} : std::span<float4>{reinterpret_cast<float4*>(ply_tet_light_colors->buffer.get()),     ply_tet_light_colors->buffer.size_bytes()/sizeof(float4)};
-	std::span lightDir = numLights == 0 ? std::span<float2>{} : std::span<float2>{reinterpret_cast<float2*>(ply_tet_light_directions->buffer.get()), ply_tet_light_directions->buffer.size_bytes()/sizeof(float2)};
+	auto getPlyData = []<typename T>(const auto& ply_data) -> std::span<T>{
+		return std::span{reinterpret_cast<T*>(ply_data->buffer.get()), ply_data->buffer.size_bytes()/sizeof(T)};
+	};
+
+	std::span pos  = getPlyData.template operator()<float3>(ply_vertices);
+	std::span sh   = getPlyData.template operator()<float3>(ply_vertex_sh);
+	std::span inds = getPlyData.template operator()<uint4>(ply_tet_indices);
+	std::span dens = getPlyData.template operator()<float>(ply_tet_densities);
 
 	const uint32_t numTets = (uint32_t)inds.size();
 
-	if (col.size() != numTets) {
-		std::cerr << "Size of color buffer " << col.size() << " != " << numTets << "!" << std::endl;
+	if (pos.size()*vertexSHDegree != sh.size()) {
+		std::cerr << "Size of SH buffer " << sh.size() << " != " << pos.size()*vertexSHDegree << "!" << std::endl;
 		return;
 	}
- 	if ((lightCol.size() > 0 && lightCol.size()/numLights != numTets) || lightCol.size() != lightDir.size()) {
-		std::cerr << "Size of light buffer " << lightColorProps.size()/numLights << " != " << numTets << "!" << std::endl;
+	if (dens.size() != numTets) {
+		std::cerr << "Size of density buffer " << dens.size() << " != " << numTets << "!" << std::endl;
 		return;
-	}
-
-	// pre-quantization: scale densities by tet radii
-	maxDensity = 0;
-	for (const float4 c : col)
-		maxDensity = max(maxDensity, c.w);
-	
-	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
-	
-	vertices  = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
-	indices   = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
-	colors    = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint32_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eA2R10G10B10UnormPack32);
-	densities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
-	spheres   = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
-	if (numLights > 0) {
-		lightColors     = TexelBufferView::Create(context.GetDevice(), context.UploadData(lightCol, vk::BufferUsageFlagBits::eUniformTexelBuffer), vk::Format::eR32G32B32A32Sfloat);
-		lightDirections = TexelBufferView::Create(context.GetDevice(), context.UploadData(lightDir, vk::BufferUsageFlagBits::eUniformTexelBuffer), vk::Format::eR32G32Sfloat);
 	}
 
 	minVertex = float3( FLT_MAX );
@@ -115,53 +92,101 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		minVertex = min(p, minVertex);
 		maxVertex = max(p, maxVertex);
 	}
+	maxDensity = 0;
+	for (const float d : dens)
+		maxDensity = max(maxDensity, d);
 
-	// compress colors and densities
-	{
-		Pipeline& pipeline = *compressColorsPipeline.get(context.GetDevice());
+	
+	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
+	
+	vertices = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
+	vertexSH     = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), sh.size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
+	tetDensities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t),     vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
+	tetIndices = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
+	tetCircumspheres = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
+	
+	// compress colors
+	/*{
+		Pipeline& pipeline = *compressColorsPipeline.get(context.GetDevice(), {
+			{ "INPUT_TYPE",  "float3" },
+			{ "OUTPUT_TYPE", "uint" },
+			{ "COMPRESS_FN", "D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(i.bgr, 1))" },
+		});
 		ShaderParameter parameters;
-		parameters["input"]   = (BufferParameter)context.UploadData(col, vk::BufferUsageFlagBits::eStorageBuffer);;
-		parameters["output"]  = (BufferParameter)colors.GetBuffer();
-		parameters["outputW"] = (BufferParameter)densities.GetBuffer();
-		parameters["size"] = numTets;
-		context.Dispatch(pipeline, numTets, parameters);
+		parameters["inputData"]  = (BufferParameter)context.UploadData(col, vk::BufferUsageFlagBits::eStorageBuffer);
+		parameters["outputData"] = (BufferParameter)vertexColors.GetBuffer();
+		parameters["count"] = (uint32_t)vertexColors.size();
+		context.Dispatch(pipeline, (uint32_t)vertexColors.size(), parameters);
+	}*/
+
+	{
+		Pipeline& f32tof16pipeline = *compressColorsPipeline.get(context.GetDevice(), {
+			{ "INPUT_TYPE",  "float" },
+			{ "OUTPUT_TYPE", "uint16_t" },
+			{ "COMPRESS_FN", "(uint16_t)f32tof16(i)" },
+		});
+			
+		// compress densities to float16
+		{
+			ShaderParameter parameters;
+			parameters["inputData"]  = (BufferParameter)context.UploadData(dens, vk::BufferUsageFlagBits::eStorageBuffer);
+			parameters["outputData"] = (BufferParameter)tetDensities.GetBuffer();
+			parameters["count"] = numTets;
+			context.Dispatch(f32tof16pipeline, numTets, parameters);
+		}
+
+		// compress SH coefficients to float16
+		{
+			const uint32_t n = (uint32_t)(sh.size()*3);
+			ShaderParameter parameters;
+			parameters["inputData"]  = (BufferParameter)context.UploadData(sh, vk::BufferUsageFlagBits::eStorageBuffer);
+			parameters["outputData"] = (BufferParameter)vertexSH.GetBuffer();
+			parameters["count"] = n;
+			context.Dispatch(f32tof16pipeline, n, parameters);
+		}
 	}
+
 
 	ComputeSpheres(context);
 }
 
 ShaderParameter TetrahedronScene::GetShaderParameter() {
 	ShaderParameter sceneParams = {};
-	sceneParams["vertices"]  = (BufferParameter)vertices;
-	sceneParams["colors"]    = (TexelBufferParameter)colors;
-	sceneParams["densities"] = (TexelBufferParameter)densities;
-	sceneParams["indices"]   = (BufferParameter)indices;
-	sceneParams["lightColors"]     = (TexelBufferParameter)lightColors;
-	sceneParams["lightDirections"] = (TexelBufferParameter)lightDirections;
-	sceneParams["spheres"]   = (BufferParameter)spheres;
-	sceneParams["numTets"]   = (uint32_t)indices.size();
-	sceneParams["aabbMin"]      = minVertex;
-	sceneParams["aabbMax"]      = maxVertex;
-	sceneParams["densityScale"] = densityScale;
-	sceneParams["numLights"]    = numLights;
+	sceneParams["vertices"]              = (BufferParameter)vertices;
+	sceneParams["vertexSH"]              = (TexelBufferParameter)vertexSH;
+	sceneParams["tetDensities"]          = (TexelBufferParameter)tetDensities;
+	sceneParams["tetIndices"]            = (BufferParameter)tetIndices;
+	sceneParams["tetCircumspheres"]      = (BufferParameter)tetCircumspheres;
+	sceneParams["aabbMin"]        = minVertex;
+	sceneParams["aabbMax"]        = maxVertex;
+	sceneParams["densityScale"]   = densityScale;
+	sceneParams["numTets"]        = TetCount();
+	sceneParams["numVertices"]    = (uint32_t)vertices.size();
+	sceneParams["vertexSHDegree"] = vertexSHDegree;
 	return sceneParams;
 }
 
 void TetrahedronScene::DrawGui(CommandContext& context) {
 	{
-		const auto[x, unit] = FormatNumber(spheres.size());
+		const auto[x, unit] = FormatNumber(TetCount());
 		ImGui::Text("%0.2f%s tetrahedra", x, unit);
 	}
 	{
 		const auto[x, unit] = FormatNumber(vertices.size());
 		ImGui::Text("%0.2f%s vertices", x, unit);
 	}
-	{
-		const auto[x, unit] = FormatBytes(vertices.size_bytes() + colors.GetBuffer().size_bytes() + indices.size_bytes() + spheres.size_bytes());
+	{	
+		size_t totalSize = 0;
+		totalSize += vertices        .size_bytes();
+		totalSize += vertexSH        .size_bytes();
+		totalSize += tetIndices      .size_bytes();   
+		totalSize += tetDensities    .size_bytes();       
+		totalSize += tetCircumspheres.size_bytes();
+		const auto[x, unit] = FormatBytes(totalSize);
 		ImGui::Text("%lu%s", x, unit);
 	}
 
-	ImGui::Text("%lu lights per tet", numLights);
+	ImGui::Text("SH degree: %u", vertexSHDegree);
 
 	ImGui::Separator();
 	ImGui::DragFloat3("Translation", &sceneTranslation.x, 0.1f);

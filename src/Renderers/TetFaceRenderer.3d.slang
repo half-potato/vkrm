@@ -31,7 +31,7 @@ v2f vsmain(uint tetId: SV_InstanceID, uint vertexId: SV_VertexID) {
     tetId = sortBuffer[tetId].y;
 
     v2f o = {};
-    o.color = scene.load_rgb_density(tetId);
+    o.color = scene.load_tet_density(tetId);
 
     if (o.color.a > densityThreshold) {
         const uint tetVertexId = TetrahedronScene::kTetTriangles[(vertexId / 3) % 4][vertexId % 3];
