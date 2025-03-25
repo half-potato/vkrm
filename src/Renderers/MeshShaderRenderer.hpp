@@ -35,7 +35,6 @@ private:
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
         ShaderDefines defines {
             { "INTERSECTION_MODE", std::to_string((uint32_t)intersectMode) },
-            { "EVAL_TET_LIGHTS", lighting ? "1" : "0" }
         };
 
         GraphicsPipelineInfo pipelineInfo {

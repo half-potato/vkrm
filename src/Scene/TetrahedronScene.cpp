@@ -98,45 +98,40 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 
 	
 	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
+
+	bool compressDensities = true;
 	
-	vertices = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
-	vertexSH     = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), sh.size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
-	tetDensities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t),     vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
+	vertices   = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
 	tetCircumspheres = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
 	
-	// compress colors
-	/*{
-		Pipeline& pipeline = *compressColorsPipeline.get(context.GetDevice(), {
-			{ "INPUT_TYPE",  "float3" },
-			{ "OUTPUT_TYPE", "uint" },
-			{ "COMPRESS_FN", "D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(i.bgr, 1))" },
-		});
-		ShaderParameter parameters;
-		parameters["inputData"]  = (BufferParameter)context.UploadData(col, vk::BufferUsageFlagBits::eStorageBuffer);
-		parameters["outputData"] = (BufferParameter)vertexColors.GetBuffer();
-		parameters["count"] = (uint32_t)vertexColors.size();
-		context.Dispatch(pipeline, (uint32_t)vertexColors.size(), parameters);
-	}*/
-
 	{
 		Pipeline& f32tof16pipeline = *compressColorsPipeline.get(context.GetDevice(), {
 			{ "INPUT_TYPE",  "float" },
 			{ "OUTPUT_TYPE", "uint16_t" },
 			{ "COMPRESS_FN", "(uint16_t)f32tof16(i)" },
 		});
-			
-		// compress densities to float16
+		
+		if (compressDensities)
 		{
+			tetDensities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
+
+			// compress densities to float16
 			ShaderParameter parameters;
 			parameters["inputData"]  = (BufferParameter)context.UploadData(dens, vk::BufferUsageFlagBits::eStorageBuffer);
 			parameters["outputData"] = (BufferParameter)tetDensities.GetBuffer();
 			parameters["count"] = numTets;
 			context.Dispatch(f32tof16pipeline, numTets, parameters);
 		}
+		else
+		{
+			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer), vk::Format::eR32Sfloat);
+		}
 
 		// compress SH coefficients to float16
 		{
+			vertexSH = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), sh.size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
+
 			const uint32_t n = (uint32_t)(sh.size()*3);
 			ShaderParameter parameters;
 			parameters["inputData"]  = (BufferParameter)context.UploadData(sh, vk::BufferUsageFlagBits::eStorageBuffer);
