@@ -20,6 +20,7 @@ private:
 	TexelBufferView       vertexSH;
 	BufferRange<uint4>    tetIndices;
 	TexelBufferView       tetDensities;
+	BufferRange<float3>   tetColors;
 	BufferRange<float4>   tetCircumspheres;
 	
 	float3 sceneTranslation = float3(0);
@@ -30,8 +31,6 @@ private:
 	float3 minVertex;
 	float3 maxVertex;
 	float  maxDensity = 0.f;
-
-	uint32_t vertexSHDegree = 0;
 
 	void ComputeSpheres(CommandContext& context);
 	

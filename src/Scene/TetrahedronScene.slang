@@ -34,6 +34,7 @@ struct TetrahedronScene {
     Buffer<float>            vertexSH;
     ByteAddressBuffer        tetIndices;
     Buffer<float>            tetDensities;
+    ByteAddressBuffer        tetColors;
     StructuredBuffer<float4> tetCircumspheres;
 
 	float3 aabbMin;
@@ -42,7 +43,7 @@ struct TetrahedronScene {
     float  densityScale;
 
     uint numVertices;
-    uint vertexSHDegree;
+    uint numVertexSHCoeffs;
 
     uint load_index(uint tetId, uint tetVertexId) {
         const uint idx = 4 * tetId + tetVertexId;
@@ -76,6 +77,12 @@ struct TetrahedronScene {
 
     float load_tet_density(uint tetId) {
         return tetDensities.Load(tetId) * densityScale;
+    }
+
+    float3 load_tet_vertex_color(uint tetId, uint tetVertexId)
+    {
+        // 4 colors per tet
+        return tetColors.Load<float3>((4*tetId + tetVertexId) * sizeof(float3));
     }
 };
 

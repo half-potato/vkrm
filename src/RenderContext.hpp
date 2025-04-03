@@ -36,7 +36,6 @@ public:
 	}
 
 	inline void PrepareScene(CommandContext& context, const ShaderParameter& sceneParams) {
-		context.PushDebugLabel("Sort");
         if (!vertexColors || vertexColors.size_bytes() != scene.VertexCount()*sizeof(uint32_t))
             vertexColors = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), scene.VertexCount()*sizeof(uint32_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eA2R10G10B10UnormPack32);
 		
@@ -48,8 +47,6 @@ public:
 		params["scene"]     = sceneParams;
 		params["sortPairs"] = (BufferParameter)sortPairs;
 		context.Dispatch(*createSortPairsPipeline.get(context.GetDevice()), scene.TetCount(), params);
-	
-		context.PopDebugLabel();
 	}
 
 	inline void ComputeVertexColors(CommandContext& context, const ShaderParameter& sceneParams, const float3 rayOrigin) {

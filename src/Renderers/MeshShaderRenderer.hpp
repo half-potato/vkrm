@@ -4,26 +4,11 @@
 
 namespace vkDelTet {
 
-enum IntersectionMode {
-    ePerPixel,
-    ePerTet,
-    eCombined,
-    eNone,
-    eNumIntersectionModes
-};
-inline static const char* kIntersectionModeNames[] = {
-    "Per Pixel",
-    "Per Tet",
-    "Combined",
-    "None"
-};
-
 class MeshShaderRenderer { 
 private:
+    bool  wireframe = false;
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
-    bool  wireframe = false;
-    IntersectionMode intersectMode = IntersectionMode::ePerPixel;
 
     TexelBufferView vertexColors;
 
@@ -33,9 +18,7 @@ private:
     });
 
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
-        ShaderDefines defines {
-            { "INTERSECTION_MODE", std::to_string((uint32_t)intersectMode) },
-        };
+        ShaderDefines defines {};
 
         GraphicsPipelineInfo pipelineInfo {
             .vertexInputState = VertexInputDescription{},
@@ -75,8 +58,6 @@ public:
 		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
 
         ImGui::Checkbox("Wireframe", &wireframe);
-
-        Gui::EnumDropdown("Intersection mode", intersectMode, kIntersectionModeNames);
     }
 
 	void Render(CommandContext& context, RenderContext& renderContext) {

@@ -32,21 +32,21 @@ static const float SH_C3[] = {
 };
 
 struct SphericalHarmonicEvaluator {
-    Buffer<float> data;
-    uint          offset;
+    uint offset;
 
-    float3 get_coeffs(uint deg) {
-        uint idx = 3 * (offset + deg);
+    float3 get_coeffs(uint coeff_i) {
+        uint idx = 3 * (offset + coeff_i - 1);
         return float3(
-            data.Load(idx + 0),
-            data.Load(idx + 1),
-            data.Load(idx + 2));
+            scene.vertexSH.Load(idx + 0),
+            scene.vertexSH.Load(idx + 1),
+            scene.vertexSH.Load(idx + 2));
     }
 
+    /*
     float3 eval_deg0(float3 dir) {
         return SH_C0 * get_coeffs(0) + 0.5f;
     }
-
+    */
     float3 eval_deg1(float3 dir) {
         return -SH_C1 * dir.y * get_coeffs(1) +
                 SH_C1 * dir.z * get_coeffs(2) +
@@ -70,8 +70,6 @@ struct SphericalHarmonicEvaluator {
 
 // --------------------------------------------------------------------------------
 
-#define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
-
 [shader("compute")]
 [numthreads(32,1,1)]
 void main(uint3 index: SV_DispatchThreadID) {
@@ -81,18 +79,12 @@ void main(uint3 index: SV_DispatchThreadID) {
 
     const float3 dir = normalize(scene.load_vertex(vertexId) - rayOrigin);
 
-    SphericalHarmonicEvaluator sh = {
-        scene.vertexSH,
-        vertexId * scene.vertexSHDegree
-    };
+    SphericalHarmonicEvaluator sh = { vertexId * scene.numVertexSHCoeffs };
 
     float3 c = 0;
-    if (scene.vertexSHDegree > 0) c += sh.eval_deg0(dir);
-    if (scene.vertexSHDegree > 1) c += sh.eval_deg1(dir);
-    if (scene.vertexSHDegree > 2) c += sh.eval_deg2(dir);
-
-    // softplus
-    c = softplus(c, 10);
+    // c += sh.eval_deg0(dir);
+    c += sh.eval_deg1(dir);
+    c += sh.eval_deg2(dir);
 
     vertexColors[vertexId] = D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1));
 }

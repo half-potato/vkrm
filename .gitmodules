@@ -1,6 +1,3 @@
-[submodule "Rose"]
-	path = Rose
-	url = https://github.com/Shmaug/Rose
 [submodule "extern/Rose"]
 	path = extern/Rose
 	url = https://github.com/Shmaug/Rose

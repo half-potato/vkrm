@@ -41,7 +41,8 @@ private:
 public:
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
-		renderContext.PrepareScene(context, renderContext.scene.GetShaderParameter());
+		if (renderContext.scene.VertexCount() > 0)
+			renderContext.PrepareScene(context, renderContext.scene.GetShaderParameter());
 	}
 
 	inline void DrawPropertiesGui(CommandContext& context) {
