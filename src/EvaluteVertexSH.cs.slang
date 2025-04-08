@@ -5,7 +5,7 @@ using namespace vkDelTet;
 using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
-RWStructuredBuffer<uint32_t> vertexColors;
+RWStructuredBuffer<float4> vertexColors;
 uniform float3 rayOrigin;
 
 // --------------------------------------------------------------------------------
@@ -86,5 +86,6 @@ void main(uint3 index: SV_DispatchThreadID) {
     c += sh.eval_deg1(dir);
     c += sh.eval_deg2(dir);
 
-    vertexColors[vertexId] = D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1));
+    // vertexColors[vertexId] = D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1));
+    vertexColors[vertexId] = float4(c, 1);
 }

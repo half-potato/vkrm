@@ -36,12 +36,11 @@ public:
 	}
 
 	inline void PrepareScene(CommandContext& context, const ShaderParameter& sceneParams) {
-        if (!vertexColors || vertexColors.size_bytes() != scene.VertexCount()*sizeof(uint32_t))
-            vertexColors = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), scene.VertexCount()*sizeof(uint32_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eA2R10G10B10UnormPack32);
+        if (!vertexColors || vertexColors.size_bytes() != scene.VertexCount()*sizeof(float4))
+            vertexColors = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), scene.VertexCount()*sizeof(float4), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32G32B32A32Sfloat); //vk::Format::eA2R10G10B10UnormPack32);
 		
-		if (!sortPairs || sortPairs.size() != scene.TetCount()) {
+		if (!sortPairs || sortPairs.size() != scene.TetCount())
 			sortPairs = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
-		}
 
 		ShaderParameter params = {};
 		params["scene"]     = sceneParams;

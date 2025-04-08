@@ -68,7 +68,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
 	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "s" });
 	auto ply_tet_rgbs      = ply.request_properties_from_element("tetrahedron", {
-		//*
+		/*
 		"r_x", "r_y", "r_z", "r_w",
 		"g_x", "g_y", "g_z", "g_w",
 		"b_x", "b_y", "b_z", "b_w"
@@ -193,7 +193,7 @@ void TetrahedronScene::DrawGui(CommandContext& context) {
 	}
 
 	if (vertices && vertexSH)
-		ImGui::Text("SH coeffs: %u", (uint32_t)(vertexSH.size()/vertices.size()));
+		ImGui::Text("SH coeffs: %u", (uint32_t)((vertexSH.size_bytes()/sizeof(float3))/vertices.size()));
 
 	ImGui::Separator();
 	ImGui::DragFloat3("Translation", &sceneTranslation.x, 0.1f);
