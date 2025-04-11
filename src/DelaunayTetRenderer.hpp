@@ -7,22 +7,18 @@
 #include <Rose/RadixSort/RadixSort.hpp>
 #include <Rose/Scene/Mesh.hpp>
 
-#include "Renderers/CentroidRenderer.hpp"
-#include "Renderers/BillboardRenderer.hpp"
-#include "Renderers/TetFaceRenderer.hpp"
 #include "Renderers/MeshShaderRenderer.hpp"
+#include "Renderers/PointCloudRenderer.hpp"
 
 namespace vkDelTet {
 
 class DelaunayTetRenderer {
 private:
 	std::tuple<
-		TetFaceRenderer,
-		BillboardRenderer,
-		CentroidRenderer,
-		MeshShaderRenderer
+		MeshShaderRenderer,
+		PointCloudRenderer
 	> renderers;
-	uint32_t rendererIndex = 3;
+	uint32_t rendererIndex = 0;
 
 	RenderContext renderContext;
 

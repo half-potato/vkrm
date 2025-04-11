@@ -4,15 +4,15 @@
 
 namespace vkDelTet {
 
-class CentroidRenderer { 
+class PointCloudRenderer { 
 private:
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
     float pointSize = 10;
 
     PipelineCache renderPipeline = PipelineCache({
-        { FindShaderPath("CentroidRenderer.3d.slang"), "vsmain" },
-        { FindShaderPath("CentroidRenderer.3d.slang"), "fsmain" }
+        { FindShaderPath("PointCloudRenderer.3d.slang"), "vsmain" },
+        { FindShaderPath("PointCloudRenderer.3d.slang"), "fsmain" }
     });
 
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
@@ -48,8 +48,8 @@ private:
     }
 
 public:
-    inline const char* Name() const { return "Circumspheres"; }
-    inline const char* Description() const { return "Draw tetrahedron circumspheres as points"; }
+    inline const char* Name() const { return "Points"; }
+    inline const char* Description() const { return "Draw vertex positions"; }
 
 	void DrawGui(CommandContext& context) {
 		ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.f);
@@ -95,11 +95,11 @@ public:
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
         context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 
-        uint32_t tetCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
-        if (tetCount > 0) {
+        uint32_t vertCount = (uint32_t)(percentTets*renderContext.scene.VertexCount());
+        if (vertCount > 0) {
             context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
-            context->draw(tetCount, 1, 0, 0); // 1 vert per tet
+            context->draw(vertCount, 1, 0, 0); // 1 vert per tet
         }
 
         renderContext.EndRendering(context);
