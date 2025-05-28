@@ -142,18 +142,18 @@ float4 fsmain(v2f v) : SV_Target {
     if (t.y <= 0) return float4(0,0,0,1); // this shouldnt be possible
     opticalDepth *= t.y - max(t.x, 0);
 
-    float T = exp(-opticalDepth);
+    const float T = exp(-opticalDepth);
 
     // interpolated color
 
-    float3x3 invB = inverse(transpose(float3x3(v.v0 - v.v3, v.v1 - v.v3, v.v2 - v.v3)));
+    const float3x3 invB = inverse(transpose(float3x3(v.v0 - v.v3, v.v1 - v.v3, v.v2 - v.v3)));
+    
     float3 uvw_enter = mul(invB, (rayOrigin - v.v3) + t.x * v.rayDir);
-    float3 uvw_exit  = mul(invB, (rayOrigin - v.v3) + t.y * v.rayDir);
-
     float  w_enter = saturate(1 - uvw_enter.x - uvw_enter.y - uvw_enter.z);
     float4 b_enter = float4(uvw_enter, w_enter);
     float3 c_enter = v.c0 * b_enter.x + v.c1 * b_enter.y + v.c2 * b_enter.z + v.c3 * b_enter.w;
     
+    float3 uvw_exit  = mul(invB, (rayOrigin - v.v3) + t.y * v.rayDir);
     float  w_exit  = saturate(1 - uvw_exit.x -  uvw_exit.y -  uvw_exit.z);
     float4 b_exit = float4(uvw_exit,  w_exit);
     float3 c_exit = v.c0 * b_exit.x  + v.c1 * b_exit.y  + v.c2 * b_exit.z  + v.c3 * b_exit.w;
