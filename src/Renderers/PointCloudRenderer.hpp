@@ -99,7 +99,7 @@ public:
         if (vertCount > 0) {
             context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
-            context->draw(vertCount, 1, 0, 0); // 1 vert per tet
+            context->draw(vertCount, 1, 0, 0);
         }
 
         renderContext.EndRendering(context);

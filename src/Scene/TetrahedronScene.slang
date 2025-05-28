@@ -10,6 +10,7 @@ using namespace RoseEngine;
 static const float kPlaneEpsilon = 1e-10f;
 
 struct TetrahedronScene {
+    // 4 triangles per tet
     static const uint3 kTetTriangles[4] = {
         /*
          *    y
@@ -34,7 +35,7 @@ struct TetrahedronScene {
     Buffer<float>            vertexSH;
     ByteAddressBuffer        tetIndices;
     Buffer<float>            tetDensities;
-    ByteAddressBuffer        tetColors;
+    ByteAddressBuffer        tetGradients;
     StructuredBuffer<float4> tetCircumspheres;
 
 	float3 aabbMin;
@@ -79,16 +80,18 @@ struct TetrahedronScene {
         return tetDensities.Load(tetId) * densityScale;
     }
 
-    float3 load_tet_vertex_color(uint tetId, uint tetVertexId)
-    {
-        // 4 colors per tet
-        return tetColors.Load<float3>((4*tetId + tetVertexId) * sizeof(float3));
+    float3 load_tet_gradient(uint tetId) {
+        return tetGradients.Load<float3>(tetId * sizeof(float3));
     }
 };
 
 float4 EvalTetColor(const float4 tetColor, const float dt = 1) {
     const float T = exp(-dt * tetColor.a);
     return float4((1 - T) * tetColor.rgb, T);
+}
+
+float3 linear_color(float3 grad, float3 v) {
+    return max(dot(grad, v), 0.f);
 }
 
 #if 0

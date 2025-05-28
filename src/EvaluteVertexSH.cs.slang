@@ -70,6 +70,8 @@ struct SphericalHarmonicEvaluator {
 
 // --------------------------------------------------------------------------------
 
+#define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
+
 [shader("compute")]
 [numthreads(32,1,1)]
 void main(uint3 index: SV_DispatchThreadID) {
@@ -85,6 +87,8 @@ void main(uint3 index: SV_DispatchThreadID) {
     // c += sh.eval_deg0(dir);
     c += sh.eval_deg1(dir);
     c += sh.eval_deg2(dir);
+
+    c = softplus(c, 10);
 
     // vertexColors[vertexId] = D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1));
     vertexColors[vertexId] = float4(c, 1);

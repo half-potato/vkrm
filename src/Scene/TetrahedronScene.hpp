@@ -20,7 +20,7 @@ private:
 	TexelBufferView       vertexSH;
 	BufferRange<uint4>    tetIndices;
 	TexelBufferView       tetDensities;
-	BufferRange<float3>   tetColors;
+	BufferRange<float3>   tetGradients;
 	BufferRange<float4>   tetCircumspheres;
 	
 	float3 sceneTranslation = float3(0);
