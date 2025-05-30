@@ -4,6 +4,7 @@ using namespace vkDelTet;
 
 ParameterBlock<TetrahedronScene> scene;
 RWStructuredBuffer<float4> outputSpheres;
+RWByteAddressBuffer outputCentroids;
 
 double4 computeCircumsphere(double3 A, double3 B, double3 C, double3 D) {
     // Compute vectors from v0 to other vertices
@@ -49,6 +50,8 @@ void main(uint3 threadId: SV_DispatchThreadID) {
         return;
 
     float4x3 tet = scene.load_tet_vertices(tetId);
+
+    outputCentroids.Store<float3>(tetId * sizeof(float3), 0.25 * (tet[0] + tet[1] + tet[2] + tet[3]));
 
     outputSpheres[tetId] = (float4)computeCircumsphere(tet[0], tet[1], tet[2], tet[3]);
 }

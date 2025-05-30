@@ -21,7 +21,7 @@ struct v2f {
 v2f vsmain(uint vertId : SV_VertexID) {
     v2f o = {};
 
-    o.color = float4(1,1,1,1);
+    o.color = float4(1,1,1,0);
 
     o.pos = mul(viewProjection, float4(scene.load_vertex(vertId), 1));
     o.psize = pointSize / length(o.pos);

@@ -11,7 +11,7 @@ using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
 StructuredBuffer<uint2> sortBuffer;
-Buffer<float4> vertexColors; // precomputed vertex SH
+ByteAddressBuffer tetColors; // precomputed SH data
 
 uniform float4x4 viewProjection;
 uniform float3   rayOrigin;
@@ -31,26 +31,33 @@ struct v2f {
 };
 
 [shader("vertex")]
-void vsmain(in uint vertexId: SV_VertexID) {
+v2f vsmain(in uint vertexId: SV_VertexID) {
+    // 12 vertices per tet
     const uint tetId = sortBuffer[vertexId / 12].y;
     
     v2f o = {};
-    o.pos = 0;
 
     o.tetDensity = scene.load_tet_density(tetId);
     if (o.tetDensity > densityThreshold)
     {
-        const uint3 tri = TetrahedronScene::kTetTriangles[vertexId / 4];
-        const float4x3 tetVertices = scene.load_tet_vertices(tetId);
-        const float3 vertex = tetVertices[tri[vertexId % 3]];
+        o.tetVertices   = scene.load_tet_vertices(tetId);
+        o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3)).rgb;
+        o.colorGradient = scene.load_tet_gradient(tetId);
+
+        // 4 tris per tet
+        const uint triId = (vertexId%12) / 3;
+        const uint3 tri = TetrahedronScene::kTetTriangles[triId];
+        const float3 vertex = o.tetVertices[tri[vertexId%3]];
 
         o.pos = mul(viewProjection, float4(vertex, 1));
         o.rayDir = vertex - rayOrigin;
-
-        float3 color = vertexColors.Load(vertexId).rgb;
-
-        o.tetVertices = tetVertices;
     }
+    else
+    {
+        o.pos = 0;
+    }
+
+    return o;
 }
 
 [shader("fragment")]
@@ -60,26 +67,19 @@ float4 fsmain(v2f v) : SV_Target {
 
     v.rayDir = normalize(v.rayDir);
 
-    // intersect every plane
-
-    float opticalDepth = v.tetDensity;
-
     float2 t;
     if (!intersect_ray_tetrahedron(rayOrigin, v.rayDir, v.tetVertices, t))
-        return float4(0, 0, 0, 1); // this shouldnt be possible
+        return float4(0, 0, 0, 1); // early exit in case HW raster disagrees with ray-tet intersector
 
-    opticalDepth *= t.y - max(t.x, 0);
-
+    const float opticalDepth = v.tetDensity * (t.y - max(t.x, 0));
     const float T = exp(-opticalDepth);
 
     // interpolated color
     float3 v_enter = t.x * v.rayDir + (rayOrigin - v.tetVertices[0]);
     float3 v_exit  = t.y * v.rayDir + (rayOrigin - v.tetVertices[0]);
-    // float3 c_enter = max(linear_color(g.vertex_color, v_enter), 0.f);
-    // float3 c_exit = max(linear_color(g.vertex_color, v_exit), 0.f);
+
     float3 c_enter = max(linear_color(v.colorGradient, v_enter) + v.baseColor, 0.f);
     float3 c_exit  = max(linear_color(v.colorGradient, v_exit)  + v.baseColor, 0.f);
-    //*/
 
     // integrate color through the tet
     float X = (-opticalDepth * T + 1 - T);

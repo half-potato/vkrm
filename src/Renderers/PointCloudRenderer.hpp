@@ -63,9 +63,7 @@ public:
         const float4x4 worldToScene = inverse(sceneToWorld);
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
 
-        ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
-        
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
+        renderContext.PrepareRender(context, rayOrigin, false);
 
         context.PushDebugLabel("Rasterize");
 
@@ -80,7 +78,7 @@ public:
             const float4x4 sceneToCamera = inverse(cameraToWorld) * sceneToWorld;
 
             ShaderParameter params = {};
-            params["scene"] = sceneParams;
+            params["scene"] = renderContext.scene.GetShaderParameter();
             params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
             params["viewProjection"] = projection * sceneToCamera;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();

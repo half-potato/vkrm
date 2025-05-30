@@ -10,8 +10,6 @@ private:
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
 
-    TexelBufferView vertexColors;
-
     PipelineCache renderPipeline = PipelineCache({
         { FindShaderPath("RasterRenderer.3d.slang"), "vsmain" },
         { FindShaderPath("RasterRenderer.3d.slang"), "fsmain" }
@@ -70,12 +68,8 @@ public:
         const float4x4 viewProjection = projection * sceneToCamera;
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
         
-        ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
+        renderContext.PrepareRender(context, rayOrigin);
         
-        renderContext.SortTetrahedra(context, sceneParams, rayOrigin);
-
-        renderContext.ComputeVertexColors(context, sceneParams, rayOrigin);
-
         context.PushDebugLabel("Rasterize");
 
         Pipeline& pipeline = GetPipeline(context, renderContext);
@@ -84,11 +78,11 @@ public:
         // prepare draw parameters
         {
             ShaderParameter params = {};
-            params["scene"] = sceneParams;
-            params["sortBuffer"]   = (BufferParameter)renderContext.sortPairs;
-            params["vertexColors"] = (TexelBufferParameter)renderContext.vertexColors;
-            params["viewProjection"] = viewProjection;
-            params["rayOrigin"] = rayOrigin;
+            params["scene"]            = renderContext.scene.GetShaderParameter();
+            params["sortBuffer"]       = (BufferParameter)renderContext.sortPairs;
+            params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
+            params["viewProjection"]   = viewProjection;
+            params["rayOrigin"]        = rayOrigin;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
 
             context.UpdateDescriptorSets(*descriptorSets, params, *pipeline.Layout());

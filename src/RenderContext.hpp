@@ -12,16 +12,16 @@ private:
 	PipelineCache updateSortPairsPipeline = PipelineCache(FindShaderPath("TetSort.cs.slang"), "updatePairs");
 	PipelineCache reorderTetsPipeline     = PipelineCache(FindShaderPath("TetSort.cs.slang"), "reorderTets");
 	PipelineCache computeAlphaPipeline    = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"));
-	PipelineCache evaluateSHPipeline      = PipelineCache(FindShaderPath("EvaluteVertexSH.cs.slang"));
+	PipelineCache evaluateSHPipeline      = PipelineCache(FindShaderPath("EvaluteSH.cs.slang"));
 
 	RadixSort radixSort;
 
 public:
-	TetrahedronScene   scene;
-	ViewportCamera     camera;
-	BufferRange<uint2> sortPairs;
-	TexelBufferView    vertexColors;
-	ImageView          renderTarget;
+	TetrahedronScene    scene;
+	ViewportCamera      camera;
+	BufferRange<uint2>  sortPairs;
+	BufferRange<float3> evaluatedColors;
+	ImageView           renderTarget;
 
 	constexpr vk::PipelineColorBlendAttachmentState GetBlendState() {
 		return vk::PipelineColorBlendAttachmentState {
@@ -36,55 +36,54 @@ public:
 	}
 
 	inline void PrepareScene(CommandContext& context, const ShaderParameter& sceneParams) {
-        if (!vertexColors || vertexColors.size_bytes() != scene.VertexCount()*sizeof(float4))
-            vertexColors = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), scene.VertexCount()*sizeof(float4), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32G32B32A32Sfloat); //vk::Format::eA2R10G10B10UnormPack32);
+        if (!evaluatedColors || evaluatedColors.size() != scene.TetCount())
+            evaluatedColors = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
 		
 		if (!sortPairs || sortPairs.size() != scene.TetCount())
 			sortPairs = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
 
 		ShaderParameter params = {};
-		params["scene"]     = sceneParams;
+		params["numSpheres"]   = scene.TetCount();
 		params["sortPairs"] = (BufferParameter)sortPairs;
-		context.Dispatch(*createSortPairsPipeline.get(context.GetDevice()), scene.TetCount(), params);
+		createSortPairsPipeline(context, uint3(scene.TetCount(), 1u, 1u), params);
 	}
 
-	inline void ComputeVertexColors(CommandContext& context, const ShaderParameter& sceneParams, const float3 rayOrigin) {
-		context.PushDebugLabel("ComputeVertexColors");
+	inline void PrepareRender(CommandContext& context, const float3 rayOrigin, const bool evalSH = true) {
+		// Sort tetrahedra by power of circumsphere
+		{
+			context.PushDebugLabel("Sort");
 
-		ShaderParameter params = {};
-		params["scene"]     = sceneParams;
-		params["vertexColors"] = (BufferParameter)vertexColors.GetBuffer();
-		params["rayOrigin"] = rayOrigin;
-		context.Dispatch(*evaluateSHPipeline.get(context.GetDevice()), scene.VertexCount(), params);
-
-		context.PopDebugLabel();
-	}
-
-	inline void SortTetrahedra(CommandContext& context, ShaderParameter& sceneParams, const float3 rayOrigin) {
-		context.PushDebugLabel("Sort");
-
-		ShaderParameter params = {};
-		params["scene"]     = sceneParams;
-		params["sortPairs"] = (BufferParameter)sortPairs;
-		params["rayOrigin"] = rayOrigin;
-	
-		Pipeline& updateSortPairs = *updateSortPairsPipeline.get(context.GetDevice());
-		auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
-		context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
-		context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
-	
-		radixSort(context, sortPairs);
+			ShaderParameter params = {};
+			params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
+			params["numSpheres"] = (uint32_t)scene.TetCircumspheres().size();
+			params["sortPairs"] = (BufferParameter)sortPairs;
+			params["rayOrigin"] = rayOrigin;
 		
-		context.PopDebugLabel();
-	}
-	
-	// compute alpha = 1 - T
-	inline void ConvertToAlpha(CommandContext& context) {
-		const uint2 extent = (uint2)renderTarget.Extent();
-		ShaderParameter params = {};
-		params["image"] = ImageParameter{ .image = renderTarget, .imageLayout = vk::ImageLayout::eGeneral };
-		params["dim"] = extent;
-		context.Dispatch(*computeAlphaPipeline.get(context.GetDevice()), extent, params);
+			Pipeline& updateSortPairs = *updateSortPairsPipeline.get(context.GetDevice());
+			auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
+			context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
+			context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
+		
+			radixSort(context, sortPairs);
+			
+			context.PopDebugLabel();
+		}
+
+		// evaluate tet SH coefficients
+		if (evalSH)
+		{
+			context.PushDebugLabel("EvaluateSH");
+
+			ShaderParameter params = {};
+			params["shCoeffs"]      = (BufferParameter)scene.TetSH();
+			params["primPositions"] = (BufferParameter)scene.TetCentroids();
+			params["outputColors"]  = (BufferParameter)evaluatedColors;
+			params["rayOrigin"] = rayOrigin;
+			params["numPrimitives"] = scene.TetCount();
+			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, { { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
+
+			context.PopDebugLabel();
+		}
 	}
 
 	inline void BeginRendering(CommandContext& context) {
@@ -115,7 +114,15 @@ public:
 	
 	inline void EndRendering(CommandContext& context) {
 		context->endRendering();
-		ConvertToAlpha(context);
+
+		// compute alpha = 1 - T
+		{
+			const uint2 extent = (uint2)renderTarget.Extent();
+			ShaderParameter params = {};
+			params["image"] = ImageParameter{ .image = renderTarget, .imageLayout = vk::ImageLayout::eGeneral };
+			params["dim"] = extent;
+			context.Dispatch(*computeAlphaPipeline.get(context.GetDevice()), extent, params);
+		}
 	}
 };
 
