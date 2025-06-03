@@ -48,7 +48,7 @@ public:
 		createSortPairsPipeline(context, uint3(scene.TetCount(), 1u, 1u), params);
 	}
 
-	inline void PrepareRender(CommandContext& context, const float3 rayOrigin, const bool evalSH = true) {
+	inline void PrepareRender(CommandContext& context, const float3 rayOrigin) {
 		// Sort tetrahedra by power of circumsphere
 		{
 			context.PushDebugLabel("Sort");
@@ -70,7 +70,6 @@ public:
 		}
 
 		// evaluate tet SH coefficients
-		if (evalSH)
 		{
 			context.PushDebugLabel("EvaluateSH");
 
@@ -80,7 +79,7 @@ public:
 			params["outputColors"]  = (BufferParameter)evaluatedColors;
 			params["rayOrigin"] = rayOrigin;
 			params["numPrimitives"] = scene.TetCount();
-			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, { { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
+			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
 
 			context.PopDebugLabel();
 		}

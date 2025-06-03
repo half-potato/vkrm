@@ -29,27 +29,30 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	}
 
 	// find number of sh coeffs
-	uint32_t sh_n = 0;
+	int32_t minSH = std::numeric_limits<int32_t>::max();
+	int32_t maxSH = -1;
 	for (const auto& prop : tet_element->properties) {
 		if (!prop.name.starts_with("sh_"))
 			continue;
-		uint32_t sh_i;
-		if (sscanf(prop.name.c_str(), "sh_%u", &sh_i) > 0)
-			sh_n = max(sh_n, sh_i+1);
+		int32_t sh_i;
+		if (sscanf(prop.name.c_str(), "sh_%d", &sh_i) > 0)
+		{
+			minSH = min(minSH, sh_i);
+			maxSH = max(maxSH, sh_i);
+		}
 	}
-
-	if (sh_n == 0) {
+	if (maxSH == -1) {
 		std::cerr << "No colors in ply file." << std::endl;
 		return;
 	}
 
 	// parse SH coefficient properties
 	std::vector<std::string> sh_props;
-	for (uint32_t i = 1; i < sh_n; i++) {
-		const auto li = "sh_" + std::to_string(i) + "_";
-		sh_props.emplace_back(li + "r");
-		sh_props.emplace_back(li + "g");
-		sh_props.emplace_back(li + "b");
+	for (uint32_t i = minSH; i <= maxSH; i++) {
+		const auto prefix = "sh_" + std::to_string(i);
+		sh_props.emplace_back(prefix + "_r");
+		sh_props.emplace_back(prefix + "_g");
+		sh_props.emplace_back(prefix + "_b");
 	}
 	
 	auto getPlyData = []<typename T>(const auto& ply_data) -> std::span<T>{
@@ -87,7 +90,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
 
 	bool compressDensities = false;
-	bool compressVertexSH = false;
+	bool compressSH = false;
 	
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices       = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
@@ -118,7 +121,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32Sfloat);
 		}
 
-		if (compressVertexSH)
+		if (compressSH)
 		{
 			// compress SH coefficients to float16
 			tetSH = Buffer::Create(context.GetDevice(), sh.size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eStorageBuffer);

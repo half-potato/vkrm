@@ -63,7 +63,7 @@ public:
         const float4x4 worldToScene = inverse(sceneToWorld);
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
 
-        renderContext.PrepareRender(context, rayOrigin, false);
+        renderContext.PrepareRender(context, rayOrigin);
 
         context.PushDebugLabel("Rasterize");
 
@@ -79,7 +79,9 @@ public:
 
             ShaderParameter params = {};
             params["scene"] = renderContext.scene.GetShaderParameter();
-            params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
+            params["tetCentroids"] = (BufferParameter)renderContext.scene.TetCentroids();
+            params["tetColors"]    = (BufferParameter)renderContext.evaluatedColors;
+            params["sortBuffer"]   = (BufferParameter)renderContext.sortPairs;
             params["viewProjection"] = projection * sceneToCamera;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
             params["pointSize"] = pointSize;
@@ -93,7 +95,7 @@ public:
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
         context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 
-        uint32_t vertCount = (uint32_t)(percentTets*renderContext.scene.VertexCount());
+        uint32_t vertCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
         if (vertCount > 0) {
             context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);

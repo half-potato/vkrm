@@ -49,7 +49,7 @@ void main(uint3 threadId: SV_DispatchThreadID) {
     if (tetId >= scene.numTets)
         return;
 
-    float4x3 tet = scene.load_tet_vertices(tetId);
+    const float4x3 tet = scene.load_tet_vertices(tetId);
 
     outputCentroids.Store<float3>(tetId * sizeof(float3), 0.25 * (tet[0] + tet[1] + tet[2] + tet[3]));
 

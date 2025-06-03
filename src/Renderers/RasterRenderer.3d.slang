@@ -41,7 +41,7 @@ v2f vsmain(in uint vertexId: SV_VertexID) {
     if (o.tetDensity > densityThreshold)
     {
         o.tetVertices   = scene.load_tet_vertices(tetId);
-        o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3)).rgb;
+        o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3));
         o.colorGradient = scene.load_tet_gradient(tetId);
 
         // 4 tris per tet

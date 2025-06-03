@@ -6,6 +6,8 @@ using namespace vkDelTet;
 
 ParameterBlock<TetrahedronScene> scene;
 StructuredBuffer<uint2> sortBuffer;
+ByteAddressBuffer tetCentroids;
+ByteAddressBuffer tetColors; // precomputed SH data
 
 uniform float4x4 viewProjection;
 uniform float    densityThreshold;
@@ -18,12 +20,15 @@ struct v2f {
 };
 
 [shader("vertex")]
-v2f vsmain(uint vertId : SV_VertexID) {
+v2f vsmain(uint vertId: SV_VertexID) {
+    const uint tetId = sortBuffer[vertId].y;
+
+    float T = 0;// exp(-scene.load_tet_density(tetId));
+
     v2f o = {};
+    o.color = float4(tetColors.Load<float3>(tetId * sizeof(float3)) * (1 - T), T);
 
-    o.color = float4(1,1,1,0);
-
-    o.pos = mul(viewProjection, float4(scene.load_vertex(vertId), 1));
+    o.pos = mul(viewProjection, float4(tetCentroids.Load<float3>(tetId*sizeof(float3)), 1));
     o.psize = pointSize / length(o.pos);
         
     return o;
