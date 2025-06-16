@@ -5,6 +5,9 @@
 #include <Rose/Core/Gui.hpp>
 #include "TetrahedronScene.hpp"
 
+// matches the value in EvaluateSH.cs.slang
+#define COEFFS_PER_BUF 8
+
 using namespace vkDelTet;
 
 void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path& p) {
@@ -47,12 +50,14 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	}
 
 	// parse SH coefficient properties
-	std::vector<std::string> sh_props;
+	std::vector<std::vector<std::string>> sh_props;
 	for (uint32_t i = minSH; i <= maxSH; i++) {
 		const auto prefix = "sh_" + std::to_string(i);
-		sh_props.emplace_back(prefix + "_r");
-		sh_props.emplace_back(prefix + "_g");
-		sh_props.emplace_back(prefix + "_b");
+		const uint32_t bufId = (i - minSH) / COEFFS_PER_BUF;
+		if (bufId <= sh_props.size()) sh_props.resize(bufId + 1);
+		sh_props[bufId].emplace_back(prefix + "_r");
+		sh_props[bufId].emplace_back(prefix + "_g");
+		sh_props[bufId].emplace_back(prefix + "_b");
 	}
 	
 	auto getPlyData = []<typename T>(const auto& ply_data) -> std::span<T>{
@@ -60,22 +65,28 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	};
 
 	auto ply_vertices      = ply.request_properties_from_element("vertex", { "x", "y", "z" });
-	auto ply_vertex_sh     = ply.request_properties_from_element("tetrahedron", sh_props);
 	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
 	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "s" });
 	auto ply_tet_gradients = ply.request_properties_from_element("tetrahedron", { "grd_x", "grd_y", "grd_z" });
+	std::vector<std::shared_ptr<tinyply::PlyData>> ply_vertex_sh(sh_props.size());
+	for (uint32_t i = 0; i < sh_props.size(); i++)
+		ply_vertex_sh[i] = ply.request_properties_from_element("tetrahedron", sh_props[i]);
 
 	ply.read(file);
 
 	std::span pos  = getPlyData.template operator()<float3>(ply_vertices);
-	std::span sh   = getPlyData.template operator()<float3>(ply_vertex_sh);
 	std::span inds = getPlyData.template operator()<uint4>(ply_tet_indices);
 	std::span dens = getPlyData.template operator()<float>(ply_tet_densities);
 	std::span grad = getPlyData.template operator()<float3>(ply_tet_gradients);
 
 	const uint32_t numTets = (uint32_t)inds.size();
 
-	numTetSHCoeffs = sh.size() / numTets;
+	numTetSHCoeffs = 0;
+	std::vector<std::span<float3>> sh(ply_vertex_sh.size());
+	for (uint32_t i = 0; i < ply_vertex_sh.size(); i++) {
+		sh[i] = getPlyData.template operator()<float3>(ply_vertex_sh[i]);
+		numTetSHCoeffs += sh[i].size() / numTets;
+	}
 
 	minVertex = float3( FLT_MAX );
 	maxVertex = float3( FLT_MIN );
@@ -121,21 +132,25 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32Sfloat);
 		}
 
-		if (compressSH)
+		tetSH.resize(sh.size());
+		for (uint32_t i = 0; i < sh.size(); i++)
 		{
-			// compress SH coefficients to float16
-			tetSH = Buffer::Create(context.GetDevice(), sh.size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eStorageBuffer);
+			if (compressSH)
+			{
+				// compress SH coefficients to float16
+				tetSH[i] = Buffer::Create(context.GetDevice(), sh[i].size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eStorageBuffer);
 
-			const uint32_t n = (uint32_t)(sh.size()*3);
-			ShaderParameter parameters;
-			parameters["inputData"]  = (BufferParameter)context.UploadData(sh, vk::BufferUsageFlagBits::eStorageBuffer);
-			parameters["outputData"] = (BufferParameter)tetSH;
-			parameters["count"] = n;
-			context.Dispatch(f32tof16pipeline, n, parameters);
-		}
-		else
-		{
-			tetSH = context.UploadData(sh, vk::BufferUsageFlagBits::eStorageBuffer);
+				const uint32_t n = (uint32_t)(sh.size()*3);
+				ShaderParameter parameters;
+				parameters["inputData"]  = (BufferParameter)context.UploadData(sh[i], vk::BufferUsageFlagBits::eStorageBuffer);
+				parameters["outputData"] = (BufferParameter)tetSH[i];
+				parameters["count"] = n;
+				context.Dispatch(f32tof16pipeline, n, parameters);
+			}
+			else
+			{
+				tetSH[i] = context.UploadData(sh[i], vk::BufferUsageFlagBits::eStorageBuffer);
+			}
 		}
 	}
 
@@ -174,16 +189,16 @@ void TetrahedronScene::DrawGui(CommandContext& context) {
 	{	
 		size_t totalSize = 0;
 		totalSize += vertices        .size_bytes();
-		totalSize += tetSH           .size_bytes();
 		totalSize += tetIndices      .size_bytes();
 		totalSize += tetDensities    .size_bytes();
 		totalSize += tetGradients    .size_bytes();
 		totalSize += tetCircumspheres.size_bytes();
+		for (const auto& sh : tetSH) totalSize += sh.size_bytes();
 		const auto[x, unit] = FormatBytes(totalSize);
 		ImGui::Text("%lu%s", x, unit);
 	}
 
-	if (vertices && tetSH)
+	if (vertices)
 		ImGui::Text("SH coeffs: %u", numTetSHCoeffs);
 
 	ImGui::Separator();

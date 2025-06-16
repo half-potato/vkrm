@@ -4,17 +4,21 @@ import Rose.Core.PackedTypes;
 using namespace vkDelTet;
 using namespace RoseEngine;
 
-ByteAddressBuffer shCoeffs;
+#ifndef NUM_COEFFS
+#define NUM_COEFFS 16
+#endif
+
+#define COEFFS_PER_BUF 8
+static const bool kUseFP16 = false;
+
+
+ByteAddressBuffer shCoeffs[NUM_COEFFS / COEFFS_PER_BUF];
 ByteAddressBuffer primPositions;
 RWByteAddressBuffer outputColors;
 uniform float3 rayOrigin;
 uniform uint numPrimitives;
 
 #define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
-
-#ifndef NUM_COEFFS
-#define NUM_COEFFS 16
-#endif
 
 // --------------------------------------------------------------------------------
 // Spherical harmonics
@@ -45,11 +49,20 @@ struct SHCoeffs {
     uint address;
 
     __init(uint tetId) {
-        address = tetId * NUM_COEFFS;
+        address = tetId * COEFFS_PER_BUF;
     }
 
     __subscript(uint i) -> float3 {
-        get { return shCoeffs.Load<float3>((address + i) * sizeof(float3)); }
+        get {
+            const uint bufId = i / COEFFS_PER_BUF;
+            const uint j = i % COEFFS_PER_BUF;
+            if (kUseFP16) {
+                const uint2 bits = shCoeffs[bufId].Load<uint2>((address + j) * 6);
+                return float3(f16tof32(bits[0]), f16tof32(bits[0] >> 16), f16tof32(bits[1]));
+            } else {
+                return shCoeffs[bufId].Load<float3>((address + j) * sizeof(float3));
+            }
+        }
     }
 };
 
@@ -111,17 +124,19 @@ void main(uint3 index: SV_DispatchThreadID) {
     c += eval_deg0(coeffs, dir);
     #endif
     #if NUM_COEFFS > 1
-    //c += eval_deg1(coeffs, dir);
+    c += eval_deg1(coeffs, dir);
     #endif
     #if NUM_COEFFS > 4
-    //c += eval_deg2(coeffs, dir);
+    c += eval_deg2(coeffs, dir);
     #endif
     #if NUM_COEFFS > 9
-    //c += eval_deg3(coeffs, dir);
+    c += eval_deg3(coeffs, dir);
     #endif
 
     c = softplus(c, 10);
 
-    // colors[tetId] = D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1));
     outputColors.Store<float3>(tetId * sizeof(float3), c);
+    
+    // note: color compression doesnt work for HDR
+    // outputColors.Store(tetId * sizeof(uint), D3DX_FLOAT4_to_R10G10B10A2_UNORM(float4(c.bgr, 1)));
 }

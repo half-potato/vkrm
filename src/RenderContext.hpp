@@ -12,7 +12,7 @@ private:
 	PipelineCache updateSortPairsPipeline = PipelineCache(FindShaderPath("TetSort.cs.slang"), "updatePairs");
 	PipelineCache reorderTetsPipeline     = PipelineCache(FindShaderPath("TetSort.cs.slang"), "reorderTets");
 	PipelineCache computeAlphaPipeline    = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"));
-	PipelineCache evaluateSHPipeline      = PipelineCache(FindShaderPath("EvaluteSH.cs.slang"));
+	PipelineCache evaluateSHPipeline      = PipelineCache(FindShaderPath("EvaluateSH.cs.slang"));
 
 	RadixSort radixSort;
 
@@ -74,9 +74,10 @@ public:
 			context.PushDebugLabel("EvaluateSH");
 
 			ShaderParameter params = {};
-			params["shCoeffs"]      = (BufferParameter)scene.TetSH();
-			params["primPositions"] = (BufferParameter)scene.TetCentroids();
-			params["outputColors"]  = (BufferParameter)evaluatedColors;
+			for (uint32_t i = 0; i < scene.TetSH().size(); i++)
+				params["shCoeffs"][i] = (BufferParameter)scene.TetSH()[i];
+			params["primPositions"]   = (BufferParameter)scene.TetCentroids();
+			params["outputColors"]    = (BufferParameter)evaluatedColors;
 			params["rayOrigin"] = rayOrigin;
 			params["numPrimitives"] = scene.TetCount();
 			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});

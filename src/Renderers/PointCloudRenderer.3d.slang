@@ -23,7 +23,7 @@ struct v2f {
 v2f vsmain(uint vertId: SV_VertexID) {
     const uint tetId = sortBuffer[vertId].y;
 
-    float T = 0;// exp(-scene.load_tet_density(tetId));
+    float T = exp(-scene.load_tet_density(tetId));
 
     v2f o = {};
     o.color = float4(tetColors.Load<float3>(tetId * sizeof(float3)) * (1 - T), T);
