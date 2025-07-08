@@ -12,11 +12,13 @@ using namespace RoseEngine;
 static const bool kUseFP16 = false;
 
 
+ParameterBlock<TetrahedronScene> scene;
 ByteAddressBuffer shCoeffs[NUM_COEFFS / COEFFS_PER_BUF];
-ByteAddressBuffer primPositions;
+// ByteAddressBuffer primPositions;
 RWByteAddressBuffer outputColors;
 uniform float3 rayOrigin;
 uniform uint numPrimitives;
+RWStructuredBuffer<float4> spheres;
 
 #define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
 
@@ -114,8 +116,12 @@ void main(uint3 index: SV_DispatchThreadID) {
     if (tetId >= numPrimitives)
         return;
 
-    const float3 pos = primPositions.Load<float3>(tetId * sizeof(float3));
+    float4x3 tet   = scene.load_tet_vertices(tetId);
+    float3 colorGradient = scene.load_tet_gradient(tetId);
+    float3 pos = 0.25 * (tet[0] + tet[1] + tet[2] + tet[3]);
+    // const float3 pos = primPositions.Load<float3>(tetId * sizeof(float3));
     const float3 dir = normalize(pos - rayOrigin);
+
 
     const SHCoeffs coeffs = SHCoeffs(tetId);
 
@@ -134,6 +140,10 @@ void main(uint3 index: SV_DispatchThreadID) {
     #endif
 
     c = softplus(c, 10);
+
+    float3 center = spheres[tetId].xyz;
+    float offset = dot(colorGradient, tet[0] - center);
+    c += offset;
 
     outputColors.Store<float3>(tetId * sizeof(float3), c);
     

@@ -23,6 +23,7 @@ add_executable(DelaunayTetRenderer
 )
 set_target_properties(DelaunayTetRenderer PROPERTIES LINKER_LANGUAGE CXX)
 
+target_link_directories(DelaunayTetRenderer PRIVATE /usr/local/lib)
 target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan)
 target_link_libraries(DelaunayTetRenderer PUBLIC glm)
 target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib)

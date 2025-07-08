@@ -3,6 +3,7 @@ import Rose.Core.Quaternion;
 import Scene.TetrahedronScene;
 import SortUtils;
 import Rose.Core.PackedTypes;
+import safe_math;
 
 #include <Rose/Core/Bitfield.h>
 
@@ -60,6 +61,43 @@ v2f vsmain(in uint vertexId: SV_VertexID) {
     return o;
 }
 
+[Differentiable]
+float compute_integral_1D(float c0, float c1, float dt, float d) {
+    float alpha = safe_exp(-d*dt);
+    float X = (-d*dt*alpha + 1 - alpha);
+    float Y = (d*dt-1) + alpha;
+    return safe_div(X*c0+Y*c1, d*dt);
+}
+
+ 
+
+[Differentiable]
+inline float integrate_channel(
+    float t_n, float t_f,
+    float c_at_t0, float dc_dt, float density)
+{
+    // Find zero-crossing and adjust integration bounds to the positive segment
+    float t_zero = - safe_div(c_at_t0, dc_dt);
+    bool change_within = (t_n < t_zero) && (t_zero < t_f);
+    float c0 = max(c_at_t0 + dc_dt * t_n, 0.f);
+    float c1 = max(c_at_t0 + dc_dt * t_f, 0.f);
+    if (change_within) {
+        float cm = max(c_at_t0 + dc_dt * t_zero, 0.f);
+        float dt1 = max(t_zero - t_n, 0);
+        float dt2 = max(t_f - t_zero, 0);
+        float onemalpha = min(max(safe_exp(-density * dt1), 0.f), 1.f);
+        if (dc_dt < 0.f) {
+            return compute_integral_1D(cm, c0, dt1, density);
+        }
+        if (dc_dt > 0.f) {
+            //return compute_integral_1D(0, 0, dt1, density) + onemalpha * compute_integral_1D(c1, cm, dt2, density);
+            return onemalpha * compute_integral_1D(c1, cm, dt2, density);
+        }
+    }
+    float dt = max(t_f - t_n, 0.f);
+    return compute_integral_1D(c1, c0, dt, density);
+}
+
 [shader("fragment")]
 float4 fsmain(v2f v) : SV_Target {
     if (v.tetDensity <= densityThreshold)
@@ -78,6 +116,18 @@ float4 fsmain(v2f v) : SV_Target {
     float3 v_enter = t.x * v.rayDir + (rayOrigin - v.tetVertices[0]);
     float3 v_exit  = t.y * v.rayDir + (rayOrigin - v.tetVertices[0]);
 
+
+    float dc_dt = dot(v.colorGradient, v.rayDir);
+    float offset = dot(rayOrigin - v.tetVertices[0], v.colorGradient);
+    float3 color = {
+        integrate_channel(t.x, t.y, v.baseColor.r + offset, dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.g + offset, dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.b + offset, dc_dt, v.tetDensity)
+    };
+    //color = (1-T) * v.baseColor;
+    color = opticalDepth > 0 ? color : 0;
+    /*
+
     float3 c_enter = max(linear_color(v.colorGradient, v_enter) + v.baseColor, 0.f);
     float3 c_exit  = max(linear_color(v.colorGradient, v_exit)  + v.baseColor, 0.f);
 
@@ -85,6 +135,7 @@ float4 fsmain(v2f v) : SV_Target {
     float X = (-opticalDepth * T + 1 - T);
     float Y = (opticalDepth - 1) + T;
     float3 color = opticalDepth > 0 ? (X * c_exit + Y * c_enter) / opticalDepth : 0;
+    */
 
     return float4(color, T);
 }
