@@ -2,6 +2,7 @@
 
 #include <Rose/Core/Bitfield.h>
 import Rose.Core.MathUtils;
+import safe_math;
 
 namespace vkDelTet {
 
@@ -136,5 +137,43 @@ bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float4
 bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float3 v0, const float3 v1, const float3 v2, const float3 v3, out float2 t) {
     return intersect_ray_tetrahedron(orig, dir, float4x3(v0, v1, v2, v3), t);
 }
+
+[Differentiable]
+float compute_integral_1D(float c0, float c1, float dt, float d) {
+    float alpha = safe_exp(-d*dt);
+    float X = (-d*dt*alpha + 1 - alpha);
+    float Y = (d*dt-1) + alpha;
+    return safe_div(X*c0+Y*c1, d*dt);
+}
+
+ 
+
+[Differentiable]
+inline float integrate_channel(
+    float t_n, float t_f,
+    float c_at_t0, float dc_dt, float density)
+{
+    // Find zero-crossing and adjust integration bounds to the positive segment
+    float t_zero = - safe_div(c_at_t0, dc_dt);
+    bool change_within = (t_n < t_zero) && (t_zero < t_f);
+    float c0 = max(c_at_t0 + dc_dt * t_n, 0.f);
+    float c1 = max(c_at_t0 + dc_dt * t_f, 0.f);
+    if (change_within) {
+        float cm = max(c_at_t0 + dc_dt * t_zero, 0.f);
+        float dt1 = max(t_zero - t_n, 0);
+        float dt2 = max(t_f - t_zero, 0);
+        float onemalpha = min(max(safe_exp(-density * dt1), 0.f), 1.f);
+        if (dc_dt < 0.f) {
+            return compute_integral_1D(cm, c0, dt1, density);
+        }
+        if (dc_dt > 0.f) {
+            //return compute_integral_1D(0, 0, dt1, density) + onemalpha * compute_integral_1D(c1, cm, dt2, density);
+            return onemalpha * compute_integral_1D(c1, cm, dt2, density);
+        }
+    }
+    float dt = max(t_f - t_n, 0.f);
+    return compute_integral_1D(c1, c0, dt, density);
+}
+
 
 }

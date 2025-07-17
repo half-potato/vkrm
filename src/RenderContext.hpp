@@ -77,13 +77,10 @@ public:
 			params["scene"]            = scene.GetShaderParameter();
 			for (uint32_t i = 0; i < scene.TetSH().size(); i++)
 				params["shCoeffs"][i] = (BufferParameter)scene.TetSH()[i];
-			// params["primPositions"]   = (BufferParameter)scene.TetCentroids();
 			params["outputColors"]    = (BufferParameter)evaluatedColors;
 			params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
 			params["rayOrigin"] = rayOrigin;
 			params["numPrimitives"] = scene.TetCount();
-			// auto descriptorSets = context.GetDescriptorSets(*evaluateSHPipeline.Layout());
-			// context.UpdateDescriptorSets(*descriptorSets, params, *evaluateSHPipeline.Layout());
 			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
 
 			context.PopDebugLabel();
