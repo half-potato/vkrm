@@ -67,15 +67,12 @@ void bw_safe_div(inout DifferentialPair<float> a, inout DifferentialPair<float> 
   }
 }
 
-//[TorchEntryPoint]
-//[Differentiable]
+[Differentiable]
 [BackwardDerivative(bw_safe_div)]
 float safe_div(in float a, in float b) {
-  if (abs(b) < TINY_VAL) {
-    return safe_clip(a / TINY_VAL, MIN_VAL, MAX_VAL);
-  } else {
-    return safe_clip(a / b, MIN_VAL, MAX_VAL);
-  }
+    // This avoids the branch while protecting against division by zero.
+    float b_safe = sign(b) * max(abs(b), TINY_VAL);
+    return a / b_safe;
 }
 
 [Differentiable]

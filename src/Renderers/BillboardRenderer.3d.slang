@@ -69,18 +69,9 @@ v2f vsmain(uint tetId : SV_VertexID, out float psize : SV_PointSize) {
 [shader("fragment")]
 float4 fsmain(v2f v, float4 fragPos : SV_Position) : SV_Target {
     float2 ndc_xy = (fragPos.xy / outputResolution) * 2.0 - 1.0;
-
-    // The depth value is from the center of the billboard
     float4 ndc = float4(ndc_xy, v.pos.z / v.pos.w, 1.0);
-
-    // 2. Unproject from NDC directly to WORLD space
-    // We use the combined inverse view-projection matrix here.
     float4 world_pos_h = mul(invProjection, ndc);
-    
-    // 3. Perform the perspective divide to get the 3D world position
     float3 world_pos = world_pos_h.xyz / world_pos_h.w;
-
-    // 4. The ray direction is from the camera's origin to this world position
     float3 rayDir = normalize(world_pos - rayOrigin);
 
     float opticalDepth = v.tetDensity;
@@ -95,11 +86,11 @@ float4 fsmain(v2f v, float4 fragPos : SV_Position) : SV_Target {
     float T = exp(-opticalDepth);
 
     float dc_dt = dot(v.colorGradient, rayDir);
-    float offset = dot(rayOrigin - v.tetVertices[0], v.colorGradient);
+    // float offset = dot(rayOrigin - v.tetVertices[0], v.colorGradient);
     float3 color = {
-        integrate_channel(t.x, t.y, v.baseColor.r + offset, dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.g + offset, dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.b + offset, dc_dt, v.tetDensity)
+        integrate_channel(t.x, t.y, v.baseColor.r, dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.g, dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.b, dc_dt, v.tetDensity)
     };
     color = opticalDepth > 0 ? color : 0;
 

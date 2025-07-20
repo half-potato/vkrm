@@ -18,11 +18,14 @@ private:
 	
 	BufferRange<float3>   vertices;
 	BufferRange<float3>   tetCentroids;
+	BufferRange<float>   tetOffsets;
 	std::vector<BufferRange<uint32_t>> tetSH; // fp16 or fp32, 8 coeffs per buffer
 	BufferRange<uint4>    tetIndices;
 	TexelBufferView       tetDensities;
 	BufferRange<float3>   tetGradients;
 	BufferRange<float4>   tetCircumspheres;
+
+	BufferRange<uint>    visibleTets;
 	
 	float3 sceneTranslation = float3(0);
 	float3 sceneRotation = float3(0);
@@ -40,6 +43,7 @@ public:
 	inline uint32_t NumSHCoeffs() const { return numTetSHCoeffs; }
 	inline const BufferRange<float4>& TetCircumspheres() const { return tetCircumspheres; }
 	inline const BufferRange<float3>& TetCentroids() const { return tetCentroids; }
+	inline const BufferRange<float>& TetOffsets() const { return tetOffsets; }
 	inline const auto& TetSH() const { return tetSH; }
 	inline float    MaxDensity() const { return maxDensity; }
 	inline float    DensityScale() const { return densityScale; }

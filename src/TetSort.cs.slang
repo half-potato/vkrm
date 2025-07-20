@@ -11,6 +11,7 @@ RWStructuredBuffer<uint2> sortPairs;
 RWBuffer<float4>           sortedColors;
 RWStructuredBuffer<uint4>  sortedIndices;
 RWStructuredBuffer<float4> sortedSpheres;
+RWStructuredBuffer<uint> markedTets;        // The final, compact list of tet IDs
 
 uniform float3 rayOrigin;
 uniform uint numSpheres;
@@ -29,17 +30,22 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
     if (threadId.x >= numSpheres)
         return;
 
-    const uint tetId = threadId.x;//sortPairs[threadId.x].y;
+    // const uint tetId = visibleTets[threadId.x];//sortPairs[threadId.x].y;
+    const uint tetId = sortPairs[threadId.x].y;
+    if (markedTets.Load(tetId) == 0) {
+        sortPairs[threadId.x] = uint2(UINT32_MAX, tetId);
+    } else {
 
-    const float4 sphere = spheres[tetId];
-    const float3 toSphere = sphere.xyz - rayOrigin;
-    const float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
+        const float4 sphere = spheres[tetId];
+        const float3 toSphere = sphere.xyz - rayOrigin;
+        const float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
 
-    uint key = order_preserving_float_map(power);
-    if (sphere.w == 0 || power != power || isnan(power) || isinf(power))
-        key = UINT32_MAX;
+        uint key = order_preserving_float_map(power);
+        if (sphere.w == 0 || power != power || isnan(power) || isinf(power))
+            key = UINT32_MAX;
 
-    sortPairs[threadId.x] = uint2(key, tetId);
+        sortPairs[threadId.x] = uint2(key, tetId);
+    }
 }
 
 [shader("compute")]

@@ -87,33 +87,55 @@ float3 linear_color(float3 grad, float3 v) {
     return max(dot(grad, v), 0.f);
 }
 
+// bool intersect_plane_convex_hull(const float dist, const float denom, inout float2 t) {
+//     if (abs(denom) < kPlaneEpsilon) {
+//         // Ray is almost parallel to plane
+//         if (dist > 0) {
+//             // Entire ray is outside
+//             return false;
+//         }
+//     } else {
+//         const float t_i = dist / denom;
+//         if (denom > 0) {
+//             // Ray entering at this t
+//             if (t_i > t.x) {
+//                 t.x = t_i;
+//             }
+//         } else {
+//             // Ray exiting
+//             if (t_i < t.y) {
+//                 t.y = t_i;
+//             }
+//         }
+//     }
+//
+//     if (t.x > t.y) {
+//         return false;
+//     }
+//
+//     return true;
+// }
+
 bool intersect_plane_convex_hull(const float dist, const float denom, inout float2 t) {
-    if (abs(denom) < kPlaneEpsilon) {
-        // Ray is almost parallel to plane
-        if (dist > 0) {
-            // Entire ray is outside
-            return false;
-        }
+    // A specific epsilon is better than a variable.
+    // This rare case is okay as a branch, but the logic is simpler.
+    if (abs(denom) < 1e-6f) {
+        return dist <= 0.0f;
+    }
+
+    // This is the main optimization.
+    // It replaces the nested if/else structure with clear max/min operations.
+    // This pattern is easily converted to fast, non-branching
+    // "conditional move" instructions by the compiler.
+    const float t_i = dist / denom;
+    if (denom > 0.0f) {
+        t.x = max(t.x, t_i);
     } else {
-        const float t_i = dist / denom;
-        if (denom > 0) {
-            // Ray entering at this t
-            if (t_i > t.x) {
-                t.x = t_i;
-            }
-        } else {
-            // Ray exiting
-            if (t_i < t.y) {
-                t.y = t_i;
-            }
-        }
+        t.y = min(t.y, t_i);
     }
 
-    if (t.x > t.y) {
-        return false;
-    }
-
-    return true;
+    // The final validity check remains the same.
+    return t.x <= t.y;
 }
 
 bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float4x3 verts, out float2 t) {
@@ -139,41 +161,46 @@ bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float3
 }
 
 [Differentiable]
-float compute_integral_1D(float c0, float c1, float dt, float d) {
-    float alpha = safe_exp(-d*dt);
-    float X = (-d*dt*alpha + 1 - alpha);
-    float Y = (d*dt-1) + alpha;
-    return safe_div(X*c0+Y*c1, d*dt);
-}
+float compute_integral_1D(float c0, float c1, float d_dt) {
 
- 
+    float alpha = exp(-d_dt);
+    float X = (-d_dt*alpha + 1 - alpha);
+    float Y = (d_dt-1) + alpha;
+    return (X*c0+Y*c1) / d_dt;
+}
 
 [Differentiable]
 inline float integrate_channel(
     float t_n, float t_f,
     float c_at_t0, float dc_dt, float density)
 {
-    // Find zero-crossing and adjust integration bounds to the positive segment
-    float t_zero = - safe_div(c_at_t0, dc_dt);
-    bool change_within = (t_n < t_zero) && (t_zero < t_f);
-    float c0 = max(c_at_t0 + dc_dt * t_n, 0.f);
-    float c1 = max(c_at_t0 + dc_dt * t_f, 0.f);
-    if (change_within) {
-        float cm = max(c_at_t0 + dc_dt * t_zero, 0.f);
-        float dt1 = max(t_zero - t_n, 0);
-        float dt2 = max(t_f - t_zero, 0);
-        float onemalpha = min(max(safe_exp(-density * dt1), 0.f), 1.f);
-        if (dc_dt < 0.f) {
-            return compute_integral_1D(cm, c0, dt1, density);
-        }
-        if (dc_dt > 0.f) {
-            //return compute_integral_1D(0, 0, dt1, density) + onemalpha * compute_integral_1D(c1, cm, dt2, density);
-            return onemalpha * compute_integral_1D(c1, cm, dt2, density);
-        }
+    // Find where the linear color function C(t) would cross zero.
+    float t_zero = clamp(-(c_at_t0 / dc_dt), t_n, t_f);
+
+    // Determine the start and end of the segment where C(t) > 0.
+    // This replaces the main "if (change_within)" and nested branches.
+    float t_start = (dc_dt > 0.0f) ? t_zero : t_n;
+    float t_end   = (dc_dt < 0.0f) ? t_zero : t_f;
+
+    // Clamp this "positive" segment to the actual integration bounds [t_n, t_f].
+    float dt_pos_segment = t_end - t_start;
+    float d_dt = dt_pos_segment * density;
+    if (d_dt < 1e-3) {
+        return 0.f;
     }
-    float dt = max(t_f - t_n, 0.f);
-    return compute_integral_1D(c1, c0, dt, density);
+
+    // Calculate transmittance through the initial "zero-color" segment [t_n, t_start].
+    float dt_zero_segment = t_start - t_n;
+    float T_zero_segment = exp(-density * dt_zero_segment);
+
+    // Calculate the integral over the clamped positive segment [t_start, t_end].
+    float c_start = c_at_t0 + dc_dt * t_start;
+    float c_end   = c_at_t0 + dc_dt * t_end;
+
+    // The final result is the attenuated integral over the positive part.
+    return T_zero_segment * compute_integral_1D(c_end, c_start, d_dt);
 }
+
 
 
 }

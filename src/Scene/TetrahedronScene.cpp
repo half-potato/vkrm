@@ -106,6 +106,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices       = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
 	tetGradients     = context.UploadData(grad, vk::BufferUsageFlagBits::eStorageBuffer);
+	tetOffsets     = Buffer::Create(context.GetDevice(), numTets*sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer);
 	tetCentroids     = Buffer::Create(context.GetDevice(), numTets*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
 	tetCircumspheres = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
 	
@@ -159,6 +160,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		parameters["scene"] = GetShaderParameter();
 		parameters["outputSpheres"] = (BufferParameter)tetCircumspheres;
 		parameters["outputCentroids"] = (BufferParameter)tetCentroids;
+		parameters["outputOffsets"] = (BufferParameter)tetOffsets;
 		context.Dispatch(*createSpheresPipeline.get(context.GetDevice()), (uint32_t)tetCircumspheres.size(), parameters);
 	}
 }

@@ -51,14 +51,14 @@ public:
     inline const char* Name() const { return "HW Raster"; }
     inline const char* Description() const { return "HW Rasterization"; }
 
-	void DrawGui(CommandContext& context) {
-		ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.f);
-		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
+    void DrawGui(CommandContext& context) {
+        ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.0);
+        ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
 
         ImGui::Checkbox("Wireframe", &wireframe);
     }
 
-	void Render(CommandContext& context, RenderContext& renderContext) {
+    void Render(CommandContext& context, RenderContext& renderContext) {
         const uint2    extent = (uint2)renderContext.renderTarget.Extent();
         const float4x4 cameraToWorld = renderContext.camera.GetCameraToWorld();
         const float4x4 sceneToWorld  = renderContext.scene.Transform();
@@ -67,9 +67,9 @@ public:
         const float4x4 projection = renderContext.camera.GetProjection((float)extent.x / (float)extent.y);
         const float4x4 viewProjection = projection * sceneToCamera;
         const float3   rayOrigin = (float3)(worldToScene * float4(renderContext.camera.position, 1));
-        
+
         renderContext.PrepareRender(context, rayOrigin);
-        
+
         context.PushDebugLabel("Rasterize");
 
         Pipeline& pipeline = GetPipeline(context, renderContext);
@@ -82,8 +82,12 @@ public:
             params["sortBuffer"]       = (BufferParameter)renderContext.sortPairs;
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"]   = viewProjection;
+            params["invProjection"]    = inverse(viewProjection);
             params["rayOrigin"]        = rayOrigin;
-            params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
+            params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale();
+            params["outputResolution"] = (float2)extent;
+            params["visibleTets"] = (BufferParameter)renderContext.visibleTets;
+            params["blockSumAtomicCounter"] = (BufferParameter)renderContext.blockSumAtomicCounter;
 
             context.UpdateDescriptorSets(*descriptorSets, params, *pipeline.Layout());
         }
@@ -98,7 +102,14 @@ public:
         if (tetCount > 0) {
             context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
-            context->draw(tetCount*12, 1, 0, 0);
+            // context->draw(tetCount*12, 1, 0, 0);
+            context->drawIndirect(
+                **renderContext.drawArgs.mBuffer,  // Dereference the handle from the wrapper
+                renderContext.drawArgs.mOffset,    // Provide the buffer offset
+                1,                                     // drawCount
+                sizeof(vk::DrawIndirectCommand)        // stride
+            );
+
         }
 
         renderContext.EndRendering(context);

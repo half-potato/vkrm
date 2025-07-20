@@ -14,11 +14,15 @@ static const bool kUseFP16 = false;
 
 ParameterBlock<TetrahedronScene> scene;
 ByteAddressBuffer shCoeffs[NUM_COEFFS / COEFFS_PER_BUF];
-// ByteAddressBuffer primPositions;
+ByteAddressBuffer tetCentroids;
 RWByteAddressBuffer outputColors;
 uniform float3 rayOrigin;
 uniform uint numPrimitives;
-RWStructuredBuffer<float4> spheres;
+RWStructuredBuffer<float> tetOffsets;
+RWStructuredBuffer<uint> visibleTets;        // The final, compact list of tet IDs
+RWStructuredBuffer<uint> drawArgs;   // Buffer to hold arguments for an indirect draw call
+// RWStructuredBuffer<float3> spheres;
+RWStructuredBuffer<uint> markedTets;        // The final, compact list of tet IDs
 
 #define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
 
@@ -111,15 +115,20 @@ float3 eval_deg3(SHCoeffs c, float3 dir) {
 [shader("compute")]
 [numthreads(32, 1, 1)]
 void main(uint3 index: SV_DispatchThreadID) {
+    // if (index.x >= drawArgs[0])
+    //     return;
+    // const uint tetId = visibleTets[index.x];//sortPairs[threadId.x].y;
+    // if (index.x >= numPrimitives)
+    //     return;
+    // const uint tetId = sortPairs[threadId.x].y;
+
+    // const uint tetId = index.x;
     const uint tetId = index.x;
 
-    if (tetId >= numPrimitives)
+    if ((tetId >= numPrimitives) || (markedTets.Load(tetId) == 0))
         return;
 
-    float4x3 tet   = scene.load_tet_vertices(tetId);
-    float3 colorGradient = scene.load_tet_gradient(tetId);
-    float3 pos = 0.25 * (tet[0] + tet[1] + tet[2] + tet[3]);
-    // const float3 pos = primPositions.Load<float3>(tetId * sizeof(float3));
+    const float3 pos = tetCentroids.Load<float3>(tetId * sizeof(float3));
     const float3 dir = normalize(pos - rayOrigin);
 
 
@@ -141,9 +150,15 @@ void main(uint3 index: SV_DispatchThreadID) {
 
     c = softplus(c, 10);
 
-    float3 center = spheres[tetId].xyz;
-    float offset = dot(colorGradient, tet[0] - center);
-    c += offset;
+    // float3 center = spheres[tetId].xyz;
+    // float4x3 tet   = scene.load_tet_vertices(tetId);
+    float3 v0 = scene.load_vertex(tetId, 0);
+    float3 colorGradient = scene.load_tet_gradient(tetId);
+    // float offset = dot(colorGradient, tet[0] - center);
+
+    const float offset = tetOffsets.Load(tetId);
+    float offset2 = dot(rayOrigin - v0, colorGradient);
+    c += offset + offset2;
 
     outputColors.Store<float3>(tetId * sizeof(float3), c);
     

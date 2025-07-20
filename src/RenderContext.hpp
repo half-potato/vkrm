@@ -2,8 +2,67 @@
 
 #include <Rose/Render/ViewportCamera.hpp>
 #include "Scene/TetrahedronScene.hpp"
+#include <iostream>
+#include <vector>
+
+#define SCAN_GROUP_SIZE 256
 
 namespace vkDelTet {
+
+template<typename T>
+void DebugPrintBuffer(
+	const RoseEngine::ref<RoseEngine::Device>& device,
+    RoseEngine::BufferRange<T>  gpuSourceBuffer,
+    const std::string&          label,
+    size_t                      maxElementsToPrint = 32)
+{
+    const size_t sizeInBytes = gpuSourceBuffer.size_bytes();
+    if (sizeInBytes == 0) return;
+
+    // 1. Create a staging buffer on the CPU
+    auto stagingBuffer = RoseEngine::Buffer::Create(
+        *device,
+        sizeInBytes,
+		vk::BufferUsageFlagBits::eTransferDst,
+		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+		VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
+	);
+
+    // 2. Create a dedicated, one-shot command buffer for this operation
+    auto tempContext = RoseEngine::CommandContext::Create(device);
+    tempContext->Begin();
+
+    // 3. Record the copy command and a barrier
+    // Note: Your Copy function likely adds barriers, but being explicit is good.
+    tempContext->AddBarrier(gpuSourceBuffer, {
+        .stage  = vk::PipelineStageFlagBits2::eTransfer,
+        .access = vk::AccessFlagBits2::eTransferRead
+    });
+    tempContext->Copy(gpuSourceBuffer, stagingBuffer);
+
+    // 4. Submit the work and wait for the GPU to finish
+    tempContext->Submit();
+    device->Wait();
+
+    // 5. Map the staging buffer's memory and print the data
+	T* data = static_cast<BufferRange<T>>(stagingBuffer).data();
+    if (data)
+    {
+        std::cout << "--- " << label << " (" << gpuSourceBuffer.size() << " elements) ---\n";
+        for (size_t i = 0; i < std::min(gpuSourceBuffer.size(), maxElementsToPrint); ++i)
+        {
+            std::cout << "[" << i << "]: " << data[i] << "\n";
+        }
+        if (gpuSourceBuffer.size() > maxElementsToPrint) {
+            std::cout << "...\n";
+        }
+        std::cout << std::flush;
+    }
+
+    // `tempContext` and `stagingBuffer` are now destroyed safely.
+}
+
+
 
 // helper for drawing with transmittance in the alpha channel
 struct RenderContext {
@@ -14,6 +73,11 @@ private:
 	PipelineCache computeAlphaPipeline    = PipelineCache(FindShaderPath("InvertAlpha.cs.slang"));
 	PipelineCache evaluateSHPipeline      = PipelineCache(FindShaderPath("EvaluateSH.cs.slang"));
 
+	PipelineCache markPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "markTets");
+	PipelineCache scanPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "prefix_sum");
+	PipelineCache scatterPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "compact_tets");
+	PipelineCache scan2Pipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "scan_blocks_atomic");
+
 	RadixSort radixSort;
 
 public:
@@ -22,6 +86,12 @@ public:
 	BufferRange<uint2>  sortPairs;
 	BufferRange<float3> evaluatedColors;
 	ImageView           renderTarget;
+	BufferRange<uint>  scannedOffsets;
+	BufferRange<uint>  markedTets;
+	BufferRange<uint>  drawArgs;
+	BufferRange<uint>  visibleTets;
+	BufferRange<uint>  blockSums;
+	BufferRange<uint>  blockSumAtomicCounter;
 
 	constexpr vk::PipelineColorBlendAttachmentState GetBlendState() {
 		return vk::PipelineColorBlendAttachmentState {
@@ -36,11 +106,25 @@ public:
 	}
 
 	inline void PrepareScene(CommandContext& context, const ShaderParameter& sceneParams) {
-        if (!evaluatedColors || evaluatedColors.size() != scene.TetCount())
-            evaluatedColors = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
-		
+		if (!evaluatedColors || evaluatedColors.size() != scene.TetCount())
+			evaluatedColors = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
+
 		if (!sortPairs || sortPairs.size() != scene.TetCount())
 			sortPairs = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!markedTets || markedTets.size() != scene.TetCount())
+			markedTets = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!scannedOffsets || scannedOffsets.size() != scene.TetCount())
+			scannedOffsets = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!visibleTets || visibleTets.size() != scene.TetCount())
+			visibleTets = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		uint num_groups = (scene.TetCount() + SCAN_GROUP_SIZE - 1) / SCAN_GROUP_SIZE;
+		if (!blockSums || blockSums.size() != num_groups)
+			blockSums = Buffer::Create(context.GetDevice(), num_groups*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!blockSumAtomicCounter || blockSumAtomicCounter.size() != 1)
+			blockSumAtomicCounter = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!drawArgs || visibleTets.size() != 4)
+			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		// drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eIndirectBuffer);
 
 		ShaderParameter params = {};
 		params["numSpheres"]   = scene.TetCount();
@@ -49,6 +133,72 @@ public:
 	}
 
 	inline void PrepareRender(CommandContext& context, const float3 rayOrigin) {
+		{
+			context.PushDebugLabel("Cull");
+			const uint2 extent = (uint2)renderTarget.Extent();
+			const float4x4 projection = camera.GetProjection((float)extent.x / (float)extent.y);
+			ShaderParameter params = {};
+			params["scene"] = scene.GetShaderParameter();
+
+			uint32_t numBlocks = (scene.TetCount() + SCAN_GROUP_SIZE - 1) / SCAN_GROUP_SIZE;
+			const float4x4 cameraToWorld = camera.GetCameraToWorld();
+			const float4x4 sceneToWorld  = scene.Transform();
+			const float4x4 worldToScene  = inverse(sceneToWorld);
+			const float4x4 sceneToCamera = inverse(cameraToWorld) * sceneToWorld;
+			params["viewProjection"] = projection * sceneToCamera;
+			params["invProjection"] = inverse(projection * sceneToCamera);
+			params["rayOrigin"] = rayOrigin;
+
+			params["markedTets"] = (BufferParameter)markedTets;
+			params["scannedOffsets"] = (BufferParameter)scannedOffsets;
+			params["drawArgs"] = (BufferParameter)drawArgs;
+			params["visibleTets"] = (BufferParameter)visibleTets;
+			params["blockSums"] = (BufferParameter)blockSums;
+			params["blockSumAtomicCounter"] = (BufferParameter)blockSumAtomicCounter;
+			params["numBlocks"] = numBlocks;
+			params["outputResolution"] = (float2)extent;
+
+			Pipeline& mark = *markPipeline.get(context.GetDevice());
+			auto descriptorSets1 = context.GetDescriptorSets(*mark.Layout());
+			context.UpdateDescriptorSets(*descriptorSets1, params, *mark.Layout());
+			context.Dispatch(mark, scene.TetCount(), *descriptorSets1);
+
+			context.AddBarrier(markedTets, {
+				.stage  = vk::PipelineStageFlagBits2::eComputeShader,
+				.access = vk::AccessFlagBits2::eShaderRead
+			});
+			context.ExecuteBarriers();
+
+			Pipeline& scan = *scanPipeline.get(context.GetDevice());
+			auto descriptorSets2 = context.GetDescriptorSets(*scan.Layout());
+			context.UpdateDescriptorSets(*descriptorSets2, params, *scan.Layout());
+			context.Dispatch(scan, scene.TetCount(), *descriptorSets2);
+
+			context.AddBarrier(scannedOffsets, {
+				.stage  = vk::PipelineStageFlagBits2::eComputeShader,
+				.access = vk::AccessFlagBits2::eShaderRead
+			});
+			context.ExecuteBarriers();
+			Pipeline& scan2 = *scan2Pipeline.get(context.GetDevice());
+			context.Fill(blockSumAtomicCounter.cast<uint32_t>(), 0u);
+			auto descriptorSets3 = context.GetDescriptorSets(*scan.Layout());
+			context.UpdateDescriptorSets(*descriptorSets3, params, *scan.Layout());
+			context.Dispatch(scan2, numBlocks, *descriptorSets3);
+
+			context.AddBarrier(scannedOffsets, {
+				.stage  = vk::PipelineStageFlagBits2::eComputeShader,
+				.access = vk::AccessFlagBits2::eShaderRead
+			});
+			context.ExecuteBarriers();
+
+			Pipeline& scatter = *scatterPipeline.get(context.GetDevice());
+			auto descriptorSets4 = context.GetDescriptorSets(*scatter.Layout());
+			context.UpdateDescriptorSets(*descriptorSets4, params, *scatter.Layout());
+			context.Dispatch(scatter, scene.TetCount(), *descriptorSets4);
+
+			context.PopDebugLabel();
+		}
+
 		// Sort tetrahedra by power of circumsphere
 		{
 			context.PushDebugLabel("Sort");
@@ -58,14 +208,16 @@ public:
 			params["numSpheres"] = (uint32_t)scene.TetCircumspheres().size();
 			params["sortPairs"] = (BufferParameter)sortPairs;
 			params["rayOrigin"] = rayOrigin;
-		
+			params["markedTets"] = (BufferParameter)markedTets;
+
 			Pipeline& updateSortPairs = *updateSortPairsPipeline.get(context.GetDevice());
 			auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
 			context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
 			context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
-		
+			printf("Sorting %i pairs\n", sortPairs.size());
+
 			radixSort(context, sortPairs);
-			
+
 			context.PopDebugLabel();
 		}
 
@@ -78,9 +230,15 @@ public:
 			for (uint32_t i = 0; i < scene.TetSH().size(); i++)
 				params["shCoeffs"][i] = (BufferParameter)scene.TetSH()[i];
 			params["outputColors"]    = (BufferParameter)evaluatedColors;
-			params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
+			// params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
+			params["tetCentroids"]    = (BufferParameter)scene.TetCentroids();
+			params["tetOffsets"]    = (BufferParameter)scene.TetOffsets();
 			params["rayOrigin"] = rayOrigin;
 			params["numPrimitives"] = scene.TetCount();
+			params["visibleTets"] = (BufferParameter)visibleTets;
+			params["drawArgs"] = (BufferParameter)drawArgs;
+			params["markedTets"] = (BufferParameter)markedTets;
+
 			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
 
 			context.PopDebugLabel();
@@ -88,13 +246,13 @@ public:
 	}
 
 	inline void BeginRendering(CommandContext& context) {
-        context.AddBarrier(renderTarget, Image::ResourceState{
-            .layout = vk::ImageLayout::eColorAttachmentOptimal,
-            .stage  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            .access =  vk::AccessFlagBits2::eColorAttachmentRead|vk::AccessFlagBits2::eColorAttachmentWrite,
-            .queueFamily = context.QueueFamily() });
-        context.ExecuteBarriers();
-            
+		context.AddBarrier(renderTarget, Image::ResourceState{
+			.layout = vk::ImageLayout::eColorAttachmentOptimal,
+			.stage  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+			.access =  vk::AccessFlagBits2::eColorAttachmentRead|vk::AccessFlagBits2::eColorAttachmentWrite,
+			.queueFamily = context.QueueFamily() });
+		context.ExecuteBarriers();
+
 		vk::RenderingAttachmentInfo attachments[1] = {
 			vk::RenderingAttachmentInfo {
 				.imageView = *renderTarget,
@@ -112,7 +270,7 @@ public:
 			.colorAttachmentCount = 1,
 			.pColorAttachments = attachments });
 	}
-	
+
 	inline void EndRendering(CommandContext& context) {
 		context->endRendering();
 
