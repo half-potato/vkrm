@@ -16,6 +16,7 @@ RWByteAddressBuffer markedTets;
 RWByteAddressBuffer scannedOffsets;     // The result of the prefix sum
 RWByteAddressBuffer visibleTets;        // The final, compact list of tet IDs
 RWByteAddressBuffer drawArgs;   // Buffer to hold arguments for an indirect draw call
+RWByteAddressBuffer kernelArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer blockSumAtomicCounter;
 
 // Add this buffer for inter-group communication
@@ -192,5 +193,10 @@ void compact_tets(uint3 threadId: SV_DispatchThreadID) {
         drawArgs.Store<uint>(sizeof(uint), 1);
         drawArgs.Store<uint>(sizeof(uint) * 2, 0);
         drawArgs.Store<uint>(sizeof(uint) * 3, 0);
+
+        uint workgroupSize = 32;
+        kernelArgs.Store<uint>(0, (totalVisibleCount + workgroupSize - 1) / workgroupSize);
+        kernelArgs.Store<uint>(sizeof(uint), 1);
+        kernelArgs.Store<uint>(sizeof(uint) * 2, 1);
     }
 }

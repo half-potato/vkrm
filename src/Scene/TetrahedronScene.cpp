@@ -6,7 +6,7 @@
 #include "TetrahedronScene.hpp"
 
 // matches the value in EvaluateSH.cs.slang
-#define COEFFS_PER_BUF 8
+#define COEFFS_PER_BUF 16
 
 using namespace vkDelTet;
 
@@ -101,7 +101,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
 
 	bool compressDensities = false;
-	bool compressSH = false;
+	bool compressSH = true;
 	
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices       = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
@@ -133,6 +133,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32Sfloat);
 		}
 
+		std::cout << std::endl << "SH Size" << sh.size() << ", " << sh[0].size() << std::endl;
 		tetSH.resize(sh.size());
 		for (uint32_t i = 0; i < sh.size(); i++)
 		{
@@ -141,7 +142,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 				// compress SH coefficients to float16
 				tetSH[i] = Buffer::Create(context.GetDevice(), sh[i].size()*sizeof(uint16_t)*3, vk::BufferUsageFlagBits::eStorageBuffer);
 
-				const uint32_t n = (uint32_t)(sh.size()*3);
+				const uint32_t n = (uint32_t)(sh[i].size()*3);
 				ShaderParameter parameters;
 				parameters["inputData"]  = (BufferParameter)context.UploadData(sh[i], vk::BufferUsageFlagBits::eStorageBuffer);
 				parameters["outputData"] = (BufferParameter)tetSH[i];
@@ -205,7 +206,7 @@ void TetrahedronScene::DrawGui(CommandContext& context) {
 
 	ImGui::Separator();
 	ImGui::DragFloat3("Translation", &sceneTranslation.x, 0.1f);
-	ImGui::DragFloat3("Rotation", &sceneRotation.x, float(M_1_PI)*0.1f, -float(M_PI), float(M_PI));
+	ImGui::DragFloat3("Rotation", &sceneRotation.x, 0, -float(M_PI), float(M_PI));
 	ImGui::DragFloat("Scale", &sceneScale, 0.01f, 0.f, 1000.f);
 	ImGui::Separator();
 	Gui::ScalarField("Density scale", &densityScale, 0.f, 1e4f, 0.01f);

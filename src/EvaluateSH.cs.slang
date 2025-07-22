@@ -8,8 +8,8 @@ using namespace RoseEngine;
 #define NUM_COEFFS 16
 #endif
 
-#define COEFFS_PER_BUF 8
-static const bool kUseFP16 = false;
+#define COEFFS_PER_BUF 16
+static const bool kUseFP16 = true;
 
 
 ParameterBlock<TetrahedronScene> scene;
@@ -63,8 +63,16 @@ struct SHCoeffs {
             const uint bufId = i / COEFFS_PER_BUF;
             const uint j = i % COEFFS_PER_BUF;
             if (kUseFP16) {
-                const uint2 bits = shCoeffs[bufId].Load<uint2>((address + j) * 6);
-                return float3(f16tof32(bits[0]), f16tof32(bits[0] >> 16), f16tof32(bits[1]));
+                // Each coefficient is 3 halfs = 6 bytes.
+                const uint byte_address = (address + j) * sizeof(uint16_t) * 3;
+
+                // Load the first 4 bytes, containing the packed R and G channels.
+                const float r = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address));
+                const float g = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address + sizeof(uint16_t)));
+                const float b = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address + 2*sizeof(uint16_t)));
+// inline float2 D3DX_R16G16_FLOAT_to_FLOAT2(uint packedInput)
+
+                return float3(r, g, b);
             } else {
                 return shCoeffs[bufId].Load<float3>((address + j) * sizeof(float3));
             }
@@ -118,9 +126,8 @@ void main(uint3 index: SV_DispatchThreadID) {
     // if (index.x >= drawArgs[0])
     //     return;
     // const uint tetId = visibleTets[index.x];//sortPairs[threadId.x].y;
-    // if (index.x >= numPrimitives)
+    // if (tetId >= numPrimitives)
     //     return;
-    // const uint tetId = sortPairs[threadId.x].y;
 
     // const uint tetId = index.x;
     const uint tetId = index.x;

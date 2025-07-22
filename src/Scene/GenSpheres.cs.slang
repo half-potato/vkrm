@@ -7,6 +7,23 @@ RWStructuredBuffer<float4> outputSpheres;
 RWByteAddressBuffer outputCentroids;
 RWByteAddressBuffer outputOffsets;
 
+// Helper function to compute the maximum pairwise distance among four points
+[Differentiable]
+inline double minDistanceAmongPoints(const double3 p1,
+                                     const double3 p2,
+                                     const double3 p3,
+                                     const double3 p4)
+{
+    double dAB = length(p2 - p1);
+    double dAC = length(p3 - p1);
+    double dAD = length(p4 - p1);
+    double dBC = length(p3 - p2);
+    double dBD = length(p4 - p2);
+    double dCD = length(p4 - p3);
+    return min(dAB, min(dAC, min(dAD, min(dBC, min(dBD, dCD)))));
+}
+
+
 double4 computeCircumsphere(double3 A, double3 B, double3 C, double3 D) {
     // Compute vectors from v0 to other vertices
     double3 a = B - A;
@@ -39,6 +56,7 @@ double4 computeCircumsphere(double3 A, double3 B, double3 C, double3 D) {
     // Return absolute position
     double3 center = A + relative_circumcenter;
     double  radius = length(relative_circumcenter);
+    if (radius * radius > 1e4) return 0.0;
 
     return double4(center, radius);
 }

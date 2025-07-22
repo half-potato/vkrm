@@ -20,14 +20,13 @@ uniform float    densityThreshold;
 struct v2f {
     float4 pos : SV_Position;
 
-    [[vk::location(0)]] float3 rayDir;
-    [[vk::location(1)]] float4 planeNumerators;
-    [[vk::location(2)]] float4 planeDenominators;
+    float dc_dt;
+    float3 rayDir;
+    float4 planeNumerators;
+    float4 planeDenominators;
 
-    [[vk::location(3)]] nointerpolation float tetDensity;
-    [[vk::location(4)]] nointerpolation float3 baseColor;
-    [[vk::location(5)]] nointerpolation float3 colorGradient;
-    [[vk::location(6)]] nointerpolation float3 v0;
+    nointerpolation float tetDensity;
+    nointerpolation float3 baseColor;
 
     // [[vk::location(4)]]  nointerpolation float3 c0;
     // [[vk::location(5)]]  nointerpolation float3 c1;
@@ -64,7 +63,6 @@ void meshmain(
     {
         const uint tetId = sortBuffer[threadId.x/4].y;
         o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3));
-        o.colorGradient = scene.load_tet_gradient(tetId);
 
         o.tetDensity = scene.load_tet_density(tetId);
         if (o.tetDensity > densityThreshold)
@@ -99,7 +97,9 @@ void meshmain(
                 dot(WaveReadTetVar(n, 2), o.rayDir),
                 dot(WaveReadTetVar(n, 3), o.rayDir) );
 
-            o.v0 = WaveReadTetVar(vertex, 0);
+            float3 colorGradient = scene.load_tet_gradient(tetId);
+            o.dc_dt = dot(colorGradient, o.rayDir);
+            // o.v0 = WaveReadTetVar(vertex, 0);
 
             // float3 color = 0;
             // color += scene.load_tet_vertex_color(tetId, tetVertexId).rgb;
@@ -131,54 +131,33 @@ float4 fsmain(v2f v) : SV_Target {
         const float d = length(v.rayDir);
         v.rayDir /= d;
         v.planeDenominators /= d;
+        v.dc_dt /= d;
     }
 
-    // intersect every plane
-
+    float3 rayDir = v.rayDir;
     float opticalDepth = v.tetDensity;
+    float4 all_t = v.planeNumerators / v.planeDenominators;
 
-    float2 t = float2(0, FLT_MAX);
-    [ForceUnroll]
-    for (uint i = 0; i < 4; i++) {
-        if (!intersect_plane_convex_hull(v.planeNumerators[i], v.planeDenominators[i], t)) {
-            opticalDepth = 0;
-            t = -1;
-            break;
-        }
-    }
-    if (t.y <= 0) return float4(0,0,0,1); // this shouldnt be possible
-    opticalDepth *= t.y - max(t.x, 0);
+    float4 t_enter = (v.planeDenominators > 0.0f) ? all_t : float4(-FLT_MAX);
+    float4 t_exit  = (v.planeDenominators < 0.0f) ? all_t : float4(FLT_MAX);
 
-    float T = exp(-opticalDepth);
+    // 3. Find the latest entry point and the earliest exit point using horizontal max/min.
+    // This finds the final intersection interval [t.x, t.y].
+    float2 t = float2(
+        max(t_enter.x, max(t_enter.y, max(t_enter.z, t_enter.w))),
+        min(t_exit.x, min(t_exit.y, min(t_exit.z, t_exit.w)))
+    );
+    
+    // bool parallel_miss = any((abs(v.planeDenominators) < 1e-6f) & (v.planeNumerators > 0.0f));
+    // if (parallel_miss) return float4(0,0,0,1);
 
-    // interpolated color
-    //
-    // float3x3 invB = inverse(transpose(float3x3(v.v0 - v.v3, v.v1 - v.v3, v.v2 - v.v3)));
-    // float3 uvw_enter = mul(invB, (rayOrigin - v.v3) + t.x * v.rayDir);
-    // float3 uvw_exit  = mul(invB, (rayOrigin - v.v3) + t.y * v.rayDir);
-    //
-    // float  w_enter = saturate(1 - uvw_enter.x - uvw_enter.y - uvw_enter.z);
-    // float4 b_enter = float4(uvw_enter, w_enter);
-    // float3 c_enter = v.c0 * b_enter.x + v.c1 * b_enter.y + v.c2 * b_enter.z + v.c3 * b_enter.w;
-    // 
-    // float  w_exit  = saturate(1 - uvw_exit.x -  uvw_exit.y -  uvw_exit.z);
-    // float4 b_exit = float4(uvw_exit,  w_exit);
-    // float3 c_exit = v.c0 * b_exit.x  + v.c1 * b_exit.y  + v.c2 * b_exit.z  + v.c3 * b_exit.w;
-    //
-    // float3 base_color = ((-opticalDepth*T + 1 - T)*c_exit + (opticalDepth-1 + T)*c_enter) / opticalDepth;
-    //
-    // float3 v_enter = t.x * v.rayDir + (rayOrigin - v.tetVertices[0]);
-    // float3 v_exit  = t.y * v.rayDir + (rayOrigin - v.tetVertices[0]);
-
-
-    float dc_dt = dot(v.colorGradient, v.rayDir);
-    float offset = dot(rayOrigin - v.v0, v.colorGradient);
+    opticalDepth *= t.y - t.x;
+    const float T = exp(-opticalDepth);
     float3 color = {
-        integrate_channel(t.x, t.y, v.baseColor.r + offset, dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.g + offset, dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.b + offset, dc_dt, v.tetDensity)
+        integrate_channel(t.x, t.y, v.baseColor.r, v.dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.g, v.dc_dt, v.tetDensity),
+        integrate_channel(t.x, t.y, v.baseColor.b, v.dc_dt, v.tetDensity)
     };
-    color = opticalDepth > 0 ? color : 0;
 
     return float4(color, T);
 }

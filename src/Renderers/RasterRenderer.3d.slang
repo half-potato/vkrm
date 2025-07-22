@@ -25,14 +25,15 @@ struct v2f {
     float4 pos : SV_Position;
     
     // Intersection data, interpolated over triangles in a tet
-    [[vk::location(0)]] float3 rayDir;
-    [[vk::location(1)]] float4 planeNumerators;
-    [[vk::location(2)]] float4 planeDenominators;
-    
+    float dc_dt;
+    float3 rayDir;
+    float4 planeNumerators;
+    float4 planeDenominators;
+
+
     // Tet data, constant for vertices in a tet
-    [[vk::location(3)]] nointerpolation float  tetDensity;
-    [[vk::location(4)]] nointerpolation float3 baseColor;
-    [[vk::location(6)]] float dc_dt;
+    nointerpolation float  tetDensity;
+    nointerpolation float3 baseColor;
 };
 
 [shader("vertex")]

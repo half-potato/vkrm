@@ -28,7 +28,7 @@ private:
 	BufferRange<uint>    visibleTets;
 	
 	float3 sceneTranslation = float3(0);
-	float3 sceneRotation = float3(0);
+	float3 sceneRotation = float3(float(M_PI/2), 0, 0);
 	float  sceneScale = 1.f;
 	float  densityScale = 1.f;
 

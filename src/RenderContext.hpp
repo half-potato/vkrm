@@ -89,6 +89,7 @@ public:
 	BufferRange<uint>  scannedOffsets;
 	BufferRange<uint>  markedTets;
 	BufferRange<uint>  drawArgs;
+	BufferRange<uint>  kernelArgs;
 	BufferRange<uint>  visibleTets;
 	BufferRange<uint>  blockSums;
 	BufferRange<uint>  blockSumAtomicCounter;
@@ -124,7 +125,8 @@ public:
 			blockSumAtomicCounter = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!drawArgs || visibleTets.size() != 4)
 			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
-		// drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eIndirectBuffer);
+		if (!kernelArgs || visibleTets.size() != 3)
+			kernelArgs = Buffer::Create(context.GetDevice(), 3*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 
 		ShaderParameter params = {};
 		params["numSpheres"]   = scene.TetCount();
@@ -152,6 +154,7 @@ public:
 			params["markedTets"] = (BufferParameter)markedTets;
 			params["scannedOffsets"] = (BufferParameter)scannedOffsets;
 			params["drawArgs"] = (BufferParameter)drawArgs;
+			params["kernelArgs"] = (BufferParameter)kernelArgs;
 			params["visibleTets"] = (BufferParameter)visibleTets;
 			params["blockSums"] = (BufferParameter)blockSums;
 			params["blockSumAtomicCounter"] = (BufferParameter)blockSumAtomicCounter;
@@ -214,7 +217,6 @@ public:
 			auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
 			context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
 			context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
-			printf("Sorting %i pairs\n", sortPairs.size());
 
 			radixSort(context, sortPairs);
 
@@ -240,6 +242,7 @@ public:
 			params["markedTets"] = (BufferParameter)markedTets;
 
 			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
+			// evaluateSHPipeline.indirect(context, kernelArgs, params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
 
 			context.PopDebugLabel();
 		}
