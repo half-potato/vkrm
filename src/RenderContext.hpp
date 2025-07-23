@@ -89,12 +89,14 @@ public:
 	ViewportCamera      camera;
 	BufferRange<uint>   sortKeys;
 	BufferRange<uint>   sortPayloads;
+	BufferRange<uint2>   sortBuffer;
 	BufferRange<float3> evaluatedColors;
 	ImageView           renderTarget;
 	BufferRange<uint>  scannedOffsets;
 	BufferRange<uint>  markedTets;
 	BufferRange<uint>  drawArgs;
 	BufferRange<uint>  meshDrawArgs;
+	BufferRange<uint>  kernelArgs;
 	BufferRange<uint>  visibleTets;
 	BufferRange<uint>  blockSums;
 	BufferRange<uint>  blockSumAtomicCounter;
@@ -117,6 +119,8 @@ public:
 
 		if (!sortKeys || sortKeys.size() != scene.TetCount())
 			sortKeys = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!sortBuffer || sortPayloads.size() != scene.TetCount())
+			sortBuffer = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!sortPayloads || sortPayloads.size() != scene.TetCount())
 			sortPayloads = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!markedTets || markedTets.size() != scene.TetCount())
@@ -129,12 +133,13 @@ public:
 		if (!blockSums || blockSums.size() != num_groups)
 			blockSums = Buffer::Create(context.GetDevice(), num_groups*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!blockSumAtomicCounter || blockSumAtomicCounter.size() != 1)
-			blockSumAtomicCounter = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+			blockSumAtomicCounter = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
 		if (!meshDrawArgs || visibleTets.size() != 3)
-			meshDrawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+			meshDrawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 		if (!drawArgs || visibleTets.size() != 4)
 			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
-		// drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eIndirectBuffer);
+		if (!kernelArgs || visibleTets.size() != 3)
+			kernelArgs = Buffer::Create(context.GetDevice(), 3*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 
 		ShaderParameter params = {};
 		params["numSpheres"]   = scene.TetCount();
@@ -164,6 +169,7 @@ public:
 			params["scannedOffsets"] = (BufferParameter)scannedOffsets;
 			params["drawArgs"] = (BufferParameter)drawArgs;
 			params["meshDrawArgs"] = (BufferParameter)meshDrawArgs;
+			params["kernelArgs"] = (BufferParameter)kernelArgs;
 			params["visibleTets"] = (BufferParameter)visibleTets;
 			params["blockSums"] = (BufferParameter)blockSums;
 			params["blockSumAtomicCounter"] = (BufferParameter)blockSumAtomicCounter;
@@ -220,6 +226,7 @@ public:
 			params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
 			params["numSpheres"] = (uint32_t)scene.TetCircumspheres().size();
 			params["sortKeys"] = (BufferParameter)sortKeys;
+			// params["sortBuffer"] = (BufferParameter)sortBuffer;
 			params["sortPayloads"] = (BufferParameter)sortPayloads;
 			params["rayOrigin"] = rayOrigin;
 			params["markedTets"] = (BufferParameter)markedTets;
@@ -228,9 +235,9 @@ public:
 			auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
 			context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
 			context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
-			printf("Sorting %i pairs\n", sortKeys.size());
 
 			dRadixSort(context, sortKeys, sortPayloads);
+			// radixSort(context, sortBuffer);
 
 			context.PopDebugLabel();
 		}
@@ -254,6 +261,7 @@ public:
 			params["markedTets"] = (BufferParameter)markedTets;
 
 			evaluateSHPipeline(context, uint3(scene.TetCount(), 1u, 1u), params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
+			// evaluateSHPipeline.indirect(context, kernelArgs, params, ShaderDefines{ { "NUM_COEFFS", std::to_string(scene.NumSHCoeffs()) }});
 
 			context.PopDebugLabel();
 		}

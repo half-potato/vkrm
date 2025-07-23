@@ -84,6 +84,7 @@ public:
             ShaderParameter params = {};
             params["scene"] = sceneParams;
             params["sortPayloads"] = (BufferParameter)renderContext.sortPayloads;
+            // params["sortBuffer"] = (BufferParameter)renderContext.sortBuffer;
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"] = viewProjection;
             params["rayOrigin"] = rayOrigin;

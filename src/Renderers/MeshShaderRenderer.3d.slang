@@ -3,7 +3,7 @@
 
 #define NUM_COEFFS 16
 
-#define COEFFS_PER_BUF 8
+#define COEFFS_PER_BUF 16
 
 import Rose.Core.MathUtils;
 import Rose.Core.Quaternion;
@@ -18,6 +18,7 @@ using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
 StructuredBuffer<uint> sortPayloads;
+// StructuredBuffer<uint2> sortBuffer;
 ByteAddressBuffer tetColors; // precomputed SH data
 
 ByteAddressBuffer shCoeffs[NUM_COEFFS / COEFFS_PER_BUF];
@@ -31,26 +32,16 @@ uniform float    densityThreshold;
 struct v2f {
     float4 pos : SV_Position;
 
-    [[vk::location(0)]] float3 rayDir;
-    [[vk::location(1)]] float4 planeNumerators;
-    [[vk::location(2)]] float4 planeDenominators;
-    
-    // Tet data, constant for vertices in a tet
-    [[vk::location(3)]] nointerpolation float  tetDensity;
-    [[vk::location(4)]] nointerpolation float3 baseColor;
-    [[vk::location(6)]] float dc_dt;
+    float dc_dt;
+    float3 rayDir;
+    float4 planeNumerators;
+    float4 planeDenominators;
 
-    // [[vk::location(4)]]  nointerpolation float3 c0;
-    // [[vk::location(5)]]  nointerpolation float3 c1;
-    // [[vk::location(6)]]  nointerpolation float3 c2;
-    // [[vk::location(7)]]  nointerpolation float3 c3;
-    // [[vk::location(8)]]  nointerpolation float3 v0;
-    // [[vk::location(9)]]  nointerpolation float3 v1;
-    // [[vk::location(10)]] nointerpolation float3 v2;
-    // [[vk::location(11)]] nointerpolation float3 v3;
+    nointerpolation float tetDensity;
+    nointerpolation float3 baseColor;
 };
 
-static const bool kUseFP16 = false;
+static const bool kUseFP16 = true;
 
 #define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*(x))) )
 
@@ -130,8 +121,15 @@ struct SHCoeffs {
             const uint bufId = i / COEFFS_PER_BUF;
             const uint j = i % COEFFS_PER_BUF;
             if (kUseFP16) {
-                const uint2 bits = shCoeffs[bufId].Load<uint2>((address + j) * 6);
-                return float3(f16tof32(bits[0]), f16tof32(bits[0] >> 16), f16tof32(bits[1]));
+                const uint byte_address = (address + j) * sizeof(uint16_t) * 3;
+
+                // Load the first 4 bytes, containing the packed R and G channels.
+                const float r = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address));
+                const float g = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address + sizeof(uint16_t)));
+                const float b = f16tof32(shCoeffs[bufId].Load<uint16_t>(byte_address + 2*sizeof(uint16_t)));
+// inline float2 D3DX_R16G16_FLOAT_to_FLOAT2(uint packedInput)
+
+                return float3(r, g, b);
             } else {
                 return shCoeffs[bufId].Load<float3>((address + j) * sizeof(float3));
             }
@@ -222,6 +220,8 @@ void meshmain(
     if (threadId.x/4 < scene.numTets)
     {
         const uint tetId = sortPayloads[threadId.x/4];
+        // o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3));
+        // const uint tetId = sortBuffer[threadId.x/4].y;
         // o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3));
 
         o.tetDensity = scene.load_tet_density(tetId);

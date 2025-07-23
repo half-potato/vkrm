@@ -39,7 +39,11 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
     } else {
         const float4 sphere = spheres[tetId];
         const float3 toSphere = sphere.xyz - rayOrigin;
-        const float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
+        float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
+        // if (length(toSphere) > 1e2 || (sphere.w * sphere.w) > 1e2) {
+        if ((sphere.w * sphere.w) > 1e4) {
+            power = 1e20;
+        }
 
         uint key = order_preserving_float_map(power);
         if (sphere.w == 0 || power != power || isnan(power) || isinf(power))
