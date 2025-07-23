@@ -4,12 +4,15 @@ import Rose.Core.PackedTypes;
 using namespace vkDelTet;
 using namespace RoseEngine;
 
+
 #ifndef NUM_COEFFS
 #define NUM_COEFFS 16
 #endif
 
 #define COEFFS_PER_BUF 8
 static const bool kUseFP16 = false;
+
+#define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
 
 
 ParameterBlock<TetrahedronScene> scene;
@@ -23,8 +26,6 @@ RWStructuredBuffer<uint> visibleTets;        // The final, compact list of tet I
 RWStructuredBuffer<uint> drawArgs;   // Buffer to hold arguments for an indirect draw call
 // RWStructuredBuffer<float3> spheres;
 RWStructuredBuffer<uint> markedTets;        // The final, compact list of tet IDs
-
-#define softplus(x, beta) ( (1.0 / beta) * log(1.0 + exp(beta*x)) )
 
 // --------------------------------------------------------------------------------
 // Spherical harmonics
@@ -112,6 +113,7 @@ float3 eval_deg3(SHCoeffs c, float3 dir) {
 }
 // --------------------------------------------------------------------------------
 
+
 [shader("compute")]
 [numthreads(32, 1, 1)]
 void main(uint3 index: SV_DispatchThreadID) {
@@ -148,7 +150,7 @@ void main(uint3 index: SV_DispatchThreadID) {
     c += eval_deg3(coeffs, dir);
     #endif
 
-    c = softplus(c, 10);
+    // c = softplus(c, 10);
 
     // float3 center = spheres[tetId].xyz;
     // float4x3 tet   = scene.load_tet_vertices(tetId);

@@ -6,7 +6,8 @@ import SortUtils;
 using namespace vkDelTet;
 
 StructuredBuffer<float4>  spheres;
-RWStructuredBuffer<uint2> sortPairs;
+RWStructuredBuffer<uint> sortKeys;
+RWStructuredBuffer<uint> sortPayloads;
 
 RWBuffer<float4>           sortedColors;
 RWStructuredBuffer<uint4>  sortedIndices;
@@ -21,7 +22,8 @@ uniform uint numSpheres;
 void createPairs(uint3 threadId: SV_DispatchThreadID) {
     if (threadId.x >= numSpheres)
         return;
-    sortPairs[threadId.x] = uint2(UINT32_MAX, threadId.x);
+    sortKeys[threadId.x] = UINT32_MAX;
+    sortPayloads[threadId.x] = threadId.x;
 }
 
 [shader("compute")]
@@ -30,12 +32,11 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
     if (threadId.x >= numSpheres)
         return;
 
-    // const uint tetId = visibleTets[threadId.x];//sortPairs[threadId.x].y;
-    const uint tetId = sortPairs[threadId.x].y;
+    const uint tetId = sortPayloads[threadId.x];
     if (markedTets.Load(tetId) == 0) {
-        sortPairs[threadId.x] = uint2(UINT32_MAX, tetId);
+        sortKeys[threadId.x] = UINT32_MAX;
+        sortPayloads[threadId.x] = tetId;
     } else {
-
         const float4 sphere = spheres[tetId];
         const float3 toSphere = sphere.xyz - rayOrigin;
         const float  power = dot(toSphere, toSphere) - (sphere.w * sphere.w);
@@ -44,7 +45,8 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
         if (sphere.w == 0 || power != power || isnan(power) || isinf(power))
             key = UINT32_MAX;
 
-        sortPairs[threadId.x] = uint2(key, tetId);
+        sortKeys[threadId.x] = key;
+        sortPayloads[threadId.x] = tetId;
     }
 }
 
@@ -53,7 +55,7 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
 void reorderTets(uint3 threadId: SV_DispatchThreadID) {
     if (threadId.x >= numSpheres)
         return;/*
-    const uint tetId = sortPairs[threadId.x].y;
+    const uint tetId = sortPayloads[threadId.x];
     sortedColors.Store(threadId.x, scene.vertexColors.Load(tetId));
     sortedIndices[threadId.x] = scene.tetIndices.Load4(tetId*sizeof(uint4));
     sortedSpheres[threadId.x] = scene.tetCircumspheres[tetId];*/

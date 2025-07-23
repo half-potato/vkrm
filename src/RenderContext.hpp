@@ -2,8 +2,11 @@
 
 #include <Rose/Render/ViewportCamera.hpp>
 #include "Scene/TetrahedronScene.hpp"
+#include <Rose/RadixSort/RadixSort.hpp>
+#include <Rose/Sorting/DeviceRadixSort.h>
 #include <iostream>
 #include <vector>
+#include <vulkan/vulkan_enums.hpp>
 
 #define SCAN_GROUP_SIZE 256
 
@@ -79,16 +82,19 @@ private:
 	PipelineCache scan2Pipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "scan_blocks_atomic");
 
 	RadixSort radixSort;
+	DeviceRadixSort dRadixSort;
 
 public:
 	TetrahedronScene    scene;
 	ViewportCamera      camera;
-	BufferRange<uint2>  sortPairs;
+	BufferRange<uint>   sortKeys;
+	BufferRange<uint>   sortPayloads;
 	BufferRange<float3> evaluatedColors;
 	ImageView           renderTarget;
 	BufferRange<uint>  scannedOffsets;
 	BufferRange<uint>  markedTets;
 	BufferRange<uint>  drawArgs;
+	BufferRange<uint>  meshDrawArgs;
 	BufferRange<uint>  visibleTets;
 	BufferRange<uint>  blockSums;
 	BufferRange<uint>  blockSumAtomicCounter;
@@ -109,8 +115,10 @@ public:
 		if (!evaluatedColors || evaluatedColors.size() != scene.TetCount())
 			evaluatedColors = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
 
-		if (!sortPairs || sortPairs.size() != scene.TetCount())
-			sortPairs = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint2), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!sortKeys || sortKeys.size() != scene.TetCount())
+			sortKeys = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!sortPayloads || sortPayloads.size() != scene.TetCount())
+			sortPayloads = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!markedTets || markedTets.size() != scene.TetCount())
 			markedTets = Buffer::Create(context.GetDevice(), scene.TetCount()*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!scannedOffsets || scannedOffsets.size() != scene.TetCount())
@@ -122,17 +130,20 @@ public:
 			blockSums = Buffer::Create(context.GetDevice(), num_groups*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!blockSumAtomicCounter || blockSumAtomicCounter.size() != 1)
 			blockSumAtomicCounter = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+		if (!meshDrawArgs || visibleTets.size() != 3)
+			meshDrawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
 		if (!drawArgs || visibleTets.size() != 4)
-			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer);
+			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 		// drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eIndirectBuffer);
 
 		ShaderParameter params = {};
 		params["numSpheres"]   = scene.TetCount();
-		params["sortPairs"] = (BufferParameter)sortPairs;
+		params["sortKeys"] = (BufferParameter)sortKeys;
+		params["sortPayloads"] = (BufferParameter)sortPayloads;
 		createSortPairsPipeline(context, uint3(scene.TetCount(), 1u, 1u), params);
 	}
 
-	inline void PrepareRender(CommandContext& context, const float3 rayOrigin) {
+	inline void PrepareRender(CommandContext& context, const float3 rayOrigin, bool prepareSH=true) {
 		{
 			context.PushDebugLabel("Cull");
 			const uint2 extent = (uint2)renderTarget.Extent();
@@ -152,11 +163,13 @@ public:
 			params["markedTets"] = (BufferParameter)markedTets;
 			params["scannedOffsets"] = (BufferParameter)scannedOffsets;
 			params["drawArgs"] = (BufferParameter)drawArgs;
+			params["meshDrawArgs"] = (BufferParameter)meshDrawArgs;
 			params["visibleTets"] = (BufferParameter)visibleTets;
 			params["blockSums"] = (BufferParameter)blockSums;
 			params["blockSumAtomicCounter"] = (BufferParameter)blockSumAtomicCounter;
 			params["numBlocks"] = numBlocks;
 			params["outputResolution"] = (float2)extent;
+
 
 			Pipeline& mark = *markPipeline.get(context.GetDevice());
 			auto descriptorSets1 = context.GetDescriptorSets(*mark.Layout());
@@ -206,7 +219,8 @@ public:
 			ShaderParameter params = {};
 			params["spheres"]    = (BufferParameter)scene.TetCircumspheres();
 			params["numSpheres"] = (uint32_t)scene.TetCircumspheres().size();
-			params["sortPairs"] = (BufferParameter)sortPairs;
+			params["sortKeys"] = (BufferParameter)sortKeys;
+			params["sortPayloads"] = (BufferParameter)sortPayloads;
 			params["rayOrigin"] = rayOrigin;
 			params["markedTets"] = (BufferParameter)markedTets;
 
@@ -214,15 +228,15 @@ public:
 			auto descriptorSets = context.GetDescriptorSets(*updateSortPairs.Layout());
 			context.UpdateDescriptorSets(*descriptorSets, params, *updateSortPairs.Layout());
 			context.Dispatch(updateSortPairs, scene.TetCount(), *descriptorSets);
-			printf("Sorting %i pairs\n", sortPairs.size());
+			printf("Sorting %i pairs\n", sortKeys.size());
 
-			radixSort(context, sortPairs);
+			dRadixSort(context, sortKeys, sortPayloads);
 
 			context.PopDebugLabel();
 		}
 
 		// evaluate tet SH coefficients
-		{
+		if (prepareSH) {
 			context.PushDebugLabel("EvaluateSH");
 
 			ShaderParameter params = {};

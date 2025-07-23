@@ -7,7 +7,7 @@
 #include <Rose/RadixSort/RadixSort.hpp>
 #include <Rose/Scene/Mesh.hpp>
 
-// #include "Renderers/MeshShaderRenderer.hpp"
+#include "Renderers/MeshShaderRenderer.hpp"
 #include "Renderers/RasterRenderer.hpp"
 #include "Renderers/PointCloudRenderer.hpp"
 #include "Renderers/BillboardRenderer.hpp"
@@ -17,7 +17,7 @@ namespace vkDelTet {
 class DelaunayTetRenderer {
 private:
 	std::tuple<
-		// MeshShaderRenderer,
+		MeshShaderRenderer,
 		// BillboardRenderer,
 		RasterRenderer,
 		PointCloudRenderer

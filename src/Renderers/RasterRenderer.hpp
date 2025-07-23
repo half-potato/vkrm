@@ -79,7 +79,7 @@ public:
         {
             ShaderParameter params = {};
             params["scene"]            = renderContext.scene.GetShaderParameter();
-            params["sortBuffer"]       = (BufferParameter)renderContext.sortPairs;
+            params["sortPayloads"]     = (BufferParameter)renderContext.sortPayloads;
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"]   = viewProjection;
             params["invProjection"]    = inverse(viewProjection);

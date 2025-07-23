@@ -81,7 +81,7 @@ public:
             params["scene"] = renderContext.scene.GetShaderParameter();
             params["tetCentroids"] = (BufferParameter)renderContext.scene.TetCentroids();
             params["tetColors"]    = (BufferParameter)renderContext.evaluatedColors;
-            params["sortBuffer"]   = (BufferParameter)renderContext.sortPairs;
+            params["sortPayloads"]   = (BufferParameter)renderContext.sortPayloads;
             params["viewProjection"] = projection * sceneToCamera;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
             params["pointSize"] = pointSize;

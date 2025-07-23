@@ -2,6 +2,10 @@ import Scene.TetrahedronScene;
 import Rose.Core.MathUtils;
 import Rose.Core.Quaternion;
 
+// Must match MeshShaderRenderer.3d.slang
+#define GROUP_SIZE 32
+#define TETS_PER_GROUP (GROUP_SIZE / 4)
+
 using namespace vkDelTet;
 using namespace RoseEngine;
 
@@ -16,6 +20,7 @@ RWByteAddressBuffer markedTets;
 RWByteAddressBuffer scannedOffsets;     // The result of the prefix sum
 RWByteAddressBuffer visibleTets;        // The final, compact list of tet IDs
 RWByteAddressBuffer drawArgs;   // Buffer to hold arguments for an indirect draw call
+RWByteAddressBuffer meshDrawArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer blockSumAtomicCounter;
 
 // Add this buffer for inter-group communication
@@ -187,10 +192,14 @@ void compact_tets(uint3 threadId: SV_DispatchThreadID) {
         // uint totalVisibleCount = lastBlockSum + lastBlockTotal;
         uint totalVisibleCount = blockSumAtomicCounter.Load<uint>(0);
         
-        // drawArgs.Store<uint>(0, totalVisibleCount * 12);
         drawArgs.Store<uint>(0, totalVisibleCount * 12);
         drawArgs.Store<uint>(sizeof(uint), 1);
         drawArgs.Store<uint>(sizeof(uint) * 2, 0);
         drawArgs.Store<uint>(sizeof(uint) * 3, 0);
+
+        uint groupCountX = (totalVisibleCount + TETS_PER_GROUP - 1) / TETS_PER_GROUP;
+        meshDrawArgs.Store<uint>(0, groupCountX);
+        meshDrawArgs.Store<uint>(sizeof(uint), 1);
+        meshDrawArgs.Store<uint>(sizeof(uint) * 2, 1);
     }
 }

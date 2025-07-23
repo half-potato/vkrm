@@ -72,7 +72,7 @@ public:
         
         ShaderParameter sceneParams = renderContext.scene.GetShaderParameter();
         
-        renderContext.PrepareRender(context, rayOrigin);
+        renderContext.PrepareRender(context, rayOrigin, false);
 
         context.PushDebugLabel("Rasterize");
 
@@ -83,11 +83,15 @@ public:
         {
             ShaderParameter params = {};
             params["scene"] = sceneParams;
-            params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
+            params["sortPayloads"] = (BufferParameter)renderContext.sortPayloads;
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"] = viewProjection;
             params["rayOrigin"] = rayOrigin;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
+            for (uint32_t i = 0; i < renderContext.scene.TetSH().size(); i++)
+                    params["shCoeffs"][i] = (BufferParameter)renderContext.scene.TetSH()[i];
+            params["tetCentroids"]    = (BufferParameter)renderContext.scene.TetCentroids();
+            params["tetOffsets"]    = (BufferParameter)renderContext.scene.TetOffsets();
 
             context.UpdateDescriptorSets(*descriptorSets, params, *pipeline.Layout());
         }
@@ -104,7 +108,13 @@ public:
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
 
             const uint32_t tetsPerGroup = pipeline.GetShader()->WorkgroupSize().x/4;
-            context->drawMeshTasksEXT((tetCount + tetsPerGroup-1) / tetsPerGroup, 1, 1);
+            // context->drawMeshTasksEXT((tetCount + tetsPerGroup-1) / tetsPerGroup, 1, 1);
+            context->drawMeshTasksIndirectEXT(
+                **renderContext.meshDrawArgs.mBuffer,  // The buffer with the mesh task args
+                renderContext.meshDrawArgs.mOffset,    // Offset into the buffer
+                1,                                     // drawCount (usually 1)
+                sizeof(vk::DrawMeshTasksIndirectCommandEXT) // stride
+            );
         }
 
         renderContext.EndRendering(context);

@@ -79,7 +79,7 @@ public:
             ShaderParameter params = {};
             params["scene"] = sceneParams;
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
-            params["sortBuffer"] = (BufferParameter)renderContext.sortPairs;
+            params["sortPayloads"]   = (BufferParameter)renderContext.sortPayloads;
             params["viewProjection"] = projection * sceneToCamera;
             params["invProjection"] = inverse(projection * sceneToCamera);
             params["cameraRotation"] = glm::toQuat(worldToScene * glm::toMat4(renderContext.camera.GetRotation()));

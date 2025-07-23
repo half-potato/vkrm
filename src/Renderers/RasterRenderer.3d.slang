@@ -10,7 +10,7 @@ using namespace vkDelTet;
 using namespace RoseEngine;
 
 ParameterBlock<TetrahedronScene> scene;
-StructuredBuffer<uint2> sortBuffer;
+StructuredBuffer<uint> sortPayloads;
 ByteAddressBuffer tetColors; // precomputed SH data
 ByteAddressBuffer visibleTets;
 ByteAddressBuffer blockSumAtomicCounter;
@@ -38,7 +38,7 @@ struct v2f {
 [shader("vertex")]
 v2f vsmain(in uint vertexId: SV_VertexID) {
     // 12 vertices per tet
-    const uint rawTetId = sortBuffer[vertexId / 12].y;
+    const uint rawTetId = sortPayloads[vertexId / 12];
     const uint tetId = rawTetId;
     // const uint tetId = visibleTets.Load(rawTetIdr* sizeof(uint));
     
