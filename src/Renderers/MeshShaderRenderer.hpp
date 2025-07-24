@@ -99,7 +99,7 @@ public:
 
         // rasterize scene
 
-        renderContext.BeginRendering(context);       
+        renderContext.BeginRendering(context);
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
         context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 

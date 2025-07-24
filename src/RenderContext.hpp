@@ -85,6 +85,7 @@ private:
 	DeviceRadixSort dRadixSort;
 
 public:
+	std::optional<uint2> overrideResolution;
 	TetrahedronScene    scene;
 	ViewportCamera      camera;
 	BufferRange<uint>   sortKeys;

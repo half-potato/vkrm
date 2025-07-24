@@ -16,6 +16,7 @@ file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src" SHADER_INCLUDE_DIR)
 set_source_files_properties(
     "${CMAKE_CURRENT_SOURCE_DIR}/extern/Rose/src/Rose/Core/ShaderModule.cpp" PROPERTIES COMPILE_FLAGS
     "-DDEFAULT_SHADER_INCLUDE_PATHS=\\\"${SHADER_INCLUDE_DIR}\\\"," )
+find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
 add_executable(DelaunayTetRenderer
     src/App.cpp
@@ -24,8 +25,19 @@ add_executable(DelaunayTetRenderer
 set_target_properties(DelaunayTetRenderer PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(DelaunayTetRenderer PRIVATE /usr/local/lib)
-target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan)
-target_link_libraries(DelaunayTetRenderer PUBLIC glm)
+target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan glm)
 target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib)
 
 target_compile_definitions(DelaunayTetRenderer PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
+
+add_executable(benchmark
+    src/BenchmarkApp.cpp
+    src/Scene/TetrahedronScene.cpp
+)
+set_target_properties(benchmark PROPERTIES LINKER_LANGUAGE CXX)
+
+target_link_directories(benchmark PRIVATE /usr/local/lib)
+target_link_libraries(benchmark PUBLIC Vulkan::Vulkan glm)
+target_link_libraries(benchmark PRIVATE RoseLib Eigen3::Eigen)
+
+target_compile_definitions(benchmark PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)

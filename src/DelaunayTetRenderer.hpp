@@ -24,7 +24,6 @@ private:
 	> renderers;
 	uint32_t rendererIndex = 0;
 
-	RenderContext renderContext;
 
 	template<size_t I>
 	inline auto CallRendererFn_(auto&& fn, uint32_t idx) {
@@ -39,6 +38,7 @@ private:
 	inline auto CallRendererFn(auto&& fn) { return CallRendererFn_<0>(fn, rendererIndex); }
 
 public:
+	RenderContext renderContext;
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
 		if (renderContext.scene.VertexCount() > 0)
@@ -79,15 +79,27 @@ public:
 	}
 
 	void DrawWidgetGui(CommandContext& context, const double dt) {
-		const float2 extentf = std::bit_cast<float2>(ImGui::GetWindowContentRegionMax()) - std::bit_cast<float2>(ImGui::GetWindowContentRegionMin());
-		const uint2 extent = uint2(extentf);
-		if (extent.x == 0 || extent.y == 0) return;
+		// Get the size of the ImGui viewport for display
+		const float2 displayExtentf = std::bit_cast<float2>(ImGui::GetWindowContentRegionMax()) - std::bit_cast<float2>(ImGui::GetWindowContentRegionMin());
 
-		if (!renderContext.renderTarget || renderContext.renderTarget.Extent().x != extent.x || renderContext.renderTarget.Extent().y != extent.y) {
+		// Determine the rendering resolution
+		uint2 renderExtent;
+		if (renderContext.overrideResolution) {
+			// Use the override resolution if it exists
+			renderExtent = *renderContext.overrideResolution;
+		} else {
+			// Otherwise, use the display viewport size
+			renderExtent = uint2(displayExtentf);
+		}
+
+		if (renderExtent.x == 0 || renderExtent.y == 0) return;
+
+		// Resize the render target only when the *render* extent changes
+		if (!renderContext.renderTarget || renderContext.renderTarget.Extent().x != renderExtent.x || renderContext.renderTarget.Extent().y != renderExtent.y) {
 			renderContext.renderTarget = ImageView::Create(
 				Image::Create(context.GetDevice(), ImageInfo{
 					.format = vk::Format::eR8G8B8A8Unorm,
-					.extent = uint3(extent, 1),
+					.extent = uint3(renderExtent, 1), // Use renderExtent here
 					.usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage,
 					.queueFamilies = { context.QueueFamily() } }),
 				vk::ImageSubresourceRange{
@@ -98,13 +110,11 @@ public:
 					.layerCount = 1 });
 		}
 
-		// Draw the renderTarget image to the window
-		ImGui::Image(Gui::GetTextureID(renderContext.renderTarget, vk::Filter::eNearest), std::bit_cast<ImVec2>(extentf));
+		// Draw the renderTarget image, scaling it to the ImGui window size
+		ImGui::Image(Gui::GetTextureID(renderContext.renderTarget, vk::Filter::eNearest), std::bit_cast<ImVec2>(displayExtentf));
 
 		renderContext.camera.Update(dt);
 
-		// render the scene into renderTarget
-		
 		if (renderContext.scene.TetCount() == 0) {
 			context.ClearColor(renderContext.renderTarget, vk::ClearColorValue{std::array<float,4>{ 0, 0, 0, 0 }});
 		} else {
