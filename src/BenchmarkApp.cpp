@@ -73,6 +73,9 @@ int main(int argc, const char** argv) {
 
     app.contexts[0]->Begin();
     renderer.LoadScene(*app.contexts[0], scenePath);
+
+    renderer.renderContext.scene.sceneTranslation = float3(0);
+    renderer.renderContext.scene.sceneRotation = float3(0, 0, 0);
     app.contexts[0]->Submit();
     
     // --- Benchmark State Variables ---

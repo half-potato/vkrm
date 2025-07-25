@@ -26,8 +26,6 @@ private:
 
 	BufferRange<uint>    visibleTets;
 	
-	float3 sceneTranslation = float3(0);
-	float3 sceneRotation = float3(M_PI/2, 0, 0);
 	float  sceneScale = 1.f;
 	float  densityScale = 1.f;
 
@@ -37,6 +35,8 @@ private:
 	float  maxDensity = 0.f;
 	
 public:
+	float3 sceneTranslation = float3(0);
+	float3 sceneRotation = float3(M_PI/2, 0, 0);
 	inline uint32_t TetCount() const { return (uint32_t)tetIndices.size(); }
 	inline uint32_t VertexCount() const { return (uint32_t)vertices.size(); }
 	inline uint32_t NumSHCoeffs() const { return numTetSHCoeffs; }

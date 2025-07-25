@@ -152,9 +152,6 @@ inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras)
 }
 
 
-// --- Modified Function (GLM Only) ---
-
-// std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSparsePath, const float zNear, const int fovXfovYFlag)
 std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSparsePath, const float zNear, const int fovXfovYFlag)
 {
     const std::string camerasListing = colmapSparsePath + "/cameras.bin";
@@ -190,34 +187,50 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
         int model_id = ReadBinaryLittleEndian<int>(&camerasFile);
         params.width = ReadBinaryLittleEndian<uint64_t>(&camerasFile);
         params.height = ReadBinaryLittleEndian<uint64_t>(&camerasFile);
-        
         params.fx = ReadBinaryLittleEndian<double>(&camerasFile);
         params.fy = ReadBinaryLittleEndian<double>(&camerasFile);
         params.dx = ReadBinaryLittleEndian<double>(&camerasFile);
         params.dy = ReadBinaryLittleEndian<double>(&camerasFile);
-        
         cameraParameters[params.id] = params;
     }
-
-    // Coordinate system conversion matrix using GLM
-    Eigen::Matrix3f converter;
-    converter << 1, 0,  0,
-                 0, -1, 0,
-                 0, 0, -1;
 
     const uint64_t num_reg_images = ReadBinaryLittleEndian<uint64_t>(&imagesFile);
     for (size_t i = 0; i < num_reg_images; ++i) {
         uint32_t image_id = ReadBinaryLittleEndian<uint32_t>(&imagesFile);
-        Eigen::Quaternionf q_colmap;
-        q_colmap.w() = ReadBinaryLittleEndian<double>(&imagesFile);
-        q_colmap.x() = ReadBinaryLittleEndian<double>(&imagesFile);
-        q_colmap.y() = ReadBinaryLittleEndian<double>(&imagesFile);
-        q_colmap.z() = ReadBinaryLittleEndian<double>(&imagesFile);
         
-        Eigen::Vector3f t_colmap;
-        t_colmap.x() = ReadBinaryLittleEndian<double>(&imagesFile);
-        t_colmap.y() = ReadBinaryLittleEndian<double>(&imagesFile);
-        t_colmap.z() = ReadBinaryLittleEndian<double>(&imagesFile);
+        // --- THIS IS THE CORRECTED LOGIC ---
+
+        // 1. Read Colmap's World-to-Camera (W2C) transform
+        quat q_w2c;
+        q_w2c.w = ReadBinaryLittleEndian<double>(&imagesFile);
+        q_w2c.x = ReadBinaryLittleEndian<double>(&imagesFile);
+        q_w2c.y = ReadBinaryLittleEndian<double>(&imagesFile);
+        q_w2c.z = ReadBinaryLittleEndian<double>(&imagesFile);
+
+        float3 t_w2c;
+        t_w2c.x = ReadBinaryLittleEndian<double>(&imagesFile);
+        t_w2c.y = ReadBinaryLittleEndian<double>(&imagesFile);
+        t_w2c.z = ReadBinaryLittleEndian<double>(&imagesFile);
+
+        printf("xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", q_w2c.x, q_w2c.y, q_w2c.z, q_w2c.w, t_w2c.x, t_w2c.y, t_w2c.z);
+
+        // 2. Invert the W2C transform to get the Camera-to-World (C2W) pose
+        mat3 R_w2c = glm::mat3_cast(q_w2c);
+        mat3 R_c2w = glm::transpose(R_w2c);
+        float3 t_c2w = -R_c2w * t_w2c;
+
+        // 3. Apply coordinate system change from Colmap (Y down, Z forward) to Graphics (Y up, Z back)
+        // This is equivalent to right-multiplying the pose by a diagonal matrix with [1, -1, -1]
+        t_c2w.y *= -1.0f;
+        t_c2w.z *= -1.0f;
+        R_c2w[1] *= -1.0f; // Flip the Y column
+        R_c2w[2] *= -1.0f; // Flip the Z column
+        
+        quat final_rotation = glm::quat_cast(R_c2w);
+        float3 final_position = t_c2w;
+        printf("xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", final_rotation.x, final_rotation.y, final_rotation.z, final_rotation.w, final_position.x, final_position.y, final_position.z);
+
+        // --- END OF CORRECTED LOGIC ---
         
         uint32_t camera_id = ReadBinaryLittleEndian<uint32_t>(&imagesFile);
         
@@ -225,9 +238,7 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
         char name_char;
         do {
             imagesFile.read(&name_char, 1);
-            if (name_char != '\0') {
-                image_name += name_char;
-            }
+            if (name_char != '\0') image_name += name_char;
         } while (name_char != '\0');
 
         if (cameraParameters.find(camera_id) == cameraParameters.end()) {
@@ -236,19 +247,11 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
         }
         const CameraParametersColmap& camParams = cameraParameters.at(camera_id);
 
-        Eigen::Matrix3f R_colmap = q_colmap.toRotationMatrix();
-        Eigen::Matrix3f R_graphics = R_colmap * converter;
-        Eigen::Vector3f p_graphics = R_colmap * t_colmap;
-
-        glm::quat final_rotation = glm::make_quat(R_graphics.data());
-        glm::vec3 final_position = glm::make_vec3(p_graphics.data());
-
         const float fovY_rad = 2.0f * atanf(camParams.height / (2.0f * camParams.fy));
         const float fovX_rad = 2.0f * atanf(camParams.width / (2.0f * camParams.fx));
         const float fovY_deg = glm::degrees(fovY_rad);
         const float fovX_deg = glm::degrees(fovX_rad);
         
-        // Create the ViewportCamera as before
         ViewportCamera viewport_cam(final_position, final_rotation, fovX_deg, fovY_deg, zNear);
         viewport_cam.projectionMode = (fovXfovYFlag)
             ? ViewportCamera::ProjectionMode::FovXY
@@ -260,7 +263,6 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
 
         cameras[image_name] = final_cam_data;
 
-        // Ignore the 2D points data
         const uint64_t num_points2D = ReadBinaryLittleEndian<uint64_t>(&imagesFile);
         imagesFile.seekg(num_points2D * (sizeof(double) * 2 + sizeof(uint64_t)), std::ios_base::cur);
     }
