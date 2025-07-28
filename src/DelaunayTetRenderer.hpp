@@ -9,6 +9,7 @@
 
 #include "Renderers/MeshShaderRenderer.hpp"
 #include "Renderers/RasterRenderer.hpp"
+#include "Renderers/InstancedRenderer.hpp"
 #include "Renderers/PointCloudRenderer.hpp"
 #include "Renderers/BillboardRenderer.hpp"
 
@@ -18,8 +19,9 @@ class DelaunayTetRenderer {
 private:
 	std::tuple<
 		MeshShaderRenderer,
-		// BillboardRenderer,
+		BillboardRenderer,
 		RasterRenderer,
+		InstancedRenderer,
 		PointCloudRenderer
 	> renderers;
 	uint32_t rendererIndex = 0;

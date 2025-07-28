@@ -20,6 +20,7 @@ RWByteAddressBuffer markedTets;
 RWByteAddressBuffer scannedOffsets;     // The result of the prefix sum
 RWByteAddressBuffer visibleTets;        // The final, compact list of tet IDs
 RWByteAddressBuffer drawArgs;   // Buffer to hold arguments for an indirect draw call
+RWByteAddressBuffer insDrawArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer meshDrawArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer kernelArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer blockSumAtomicCounter;
@@ -58,9 +59,7 @@ void markTets(uint3 threadId: SV_DispatchThreadID) {
     const float2 extent = outputResolution * (mx - mn).xy;
 
     // Check if the AABB is completely outside the viewing frustum
-    bool in_frustum = !(mx.x < -1.0f || mn.x > 1.0f ||  // Outside left or right
-                          mx.y < -1.0f || mn.y > 1.0f
-                          );   // Outside near or far
+    bool in_frustum = !(mx.x < -1.0f || mn.x > 1.0f || mx.y < -1.0f || mn.y > 1.0f || mx.z < 0.f);
     
     // Add your density check here as well
     float density = scene.load_tet_density(tetId);
@@ -193,18 +192,24 @@ void compact_tets(uint3 threadId: SV_DispatchThreadID) {
         // uint totalVisibleCount = lastBlockSum + lastBlockTotal;
         uint totalVisibleCount = blockSumAtomicCounter.Load<uint>(0);
         
-        drawArgs.Store<uint>(0, totalVisibleCount * 12);
-        drawArgs.Store<uint>(sizeof(uint), 1);
-        drawArgs.Store<uint>(sizeof(uint) * 2, 0);
-        drawArgs.Store<uint>(sizeof(uint) * 3, 0);
+        drawArgs.Store<uint>(sizeof(uint)*0, totalVisibleCount * 12);
+        drawArgs.Store<uint>(sizeof(uint)*1, 1);
+        drawArgs.Store<uint>(sizeof(uint)*2, 0);
+        drawArgs.Store<uint>(sizeof(uint)*3, 0);
 
         uint groupCountX = (totalVisibleCount + TETS_PER_GROUP - 1) / TETS_PER_GROUP;
-        meshDrawArgs.Store<uint>(0, groupCountX);
-        meshDrawArgs.Store<uint>(sizeof(uint), 1);
-        meshDrawArgs.Store<uint>(sizeof(uint) * 2, 1);
+        meshDrawArgs.Store<uint>(sizeof(uint)*0, groupCountX);
+        meshDrawArgs.Store<uint>(sizeof(uint)*1, 1);
+        meshDrawArgs.Store<uint>(sizeof(uint)*2, 1);
         uint workgroupSize = 32;
-        kernelArgs.Store<uint>(0, (totalVisibleCount + workgroupSize - 1) / workgroupSize);
-        kernelArgs.Store<uint>(sizeof(uint), 1);
-        kernelArgs.Store<uint>(sizeof(uint) * 2, 1);
+        kernelArgs.Store<uint>(sizeof(uint)*0, (totalVisibleCount + workgroupSize - 1) / workgroupSize);
+        kernelArgs.Store<uint>(sizeof(uint)*1, 1);
+        kernelArgs.Store<uint>(sizeof(uint)*2, 1);
+
+        insDrawArgs.Store<uint>(sizeof(uint)*0, 3 * 4);
+        insDrawArgs.Store<uint>(sizeof(uint)*1, totalVisibleCount);
+        insDrawArgs.Store<uint>(sizeof(uint)*2, 0);
+        insDrawArgs.Store<uint>(sizeof(uint)*3, 0);
+        insDrawArgs.Store<uint>(sizeof(uint)*4, 0);
     }
 }

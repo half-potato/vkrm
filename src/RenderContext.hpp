@@ -96,6 +96,7 @@ public:
 	BufferRange<uint>  scannedOffsets;
 	BufferRange<uint>  markedTets;
 	BufferRange<uint>  drawArgs;
+	BufferRange<uint>  insDrawArgs;
 	BufferRange<uint>  meshDrawArgs;
 	BufferRange<uint>  kernelArgs;
 	BufferRange<uint>  visibleTets;
@@ -139,6 +140,8 @@ public:
 			meshDrawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 		if (!drawArgs || visibleTets.size() != 4)
 			drawArgs = Buffer::Create(context.GetDevice(), 4*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
+		if (!insDrawArgs || visibleTets.size() != 5)
+			insDrawArgs = Buffer::Create(context.GetDevice(), 5*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 		if (!kernelArgs || visibleTets.size() != 3)
 			kernelArgs = Buffer::Create(context.GetDevice(), 3*sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eIndirectBuffer);
 
@@ -169,6 +172,7 @@ public:
 			params["markedTets"] = (BufferParameter)markedTets;
 			params["scannedOffsets"] = (BufferParameter)scannedOffsets;
 			params["drawArgs"] = (BufferParameter)drawArgs;
+			params["insDrawArgs"] = (BufferParameter)insDrawArgs;
 			params["meshDrawArgs"] = (BufferParameter)meshDrawArgs;
 			params["kernelArgs"] = (BufferParameter)kernelArgs;
 			params["visibleTets"] = (BufferParameter)visibleTets;

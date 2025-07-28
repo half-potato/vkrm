@@ -161,7 +161,6 @@ float3 eval_sh_partial(uint local_idx, SHCoeffs c, float3 dir)
 #else
             return eval_deg0(c, dir);
 #endif
-            break;
 
         // Thread 1: Handles coefficients 4-7 (First part of degree 2)
         case 1:
@@ -171,7 +170,6 @@ float3 eval_sh_partial(uint local_idx, SHCoeffs c, float3 dir)
                    SH_C2[2] * c[6] * (2.0f * zz - xx - yy) +
                    SH_C2[3] * c[7] * xz;
     #endif
-            break;
 
         // Thread 2: Handles coefficients 8-11 (Last part of degree 2, first part of degree 3)
         case 2:
@@ -184,7 +182,6 @@ float3 eval_sh_partial(uint local_idx, SHCoeffs c, float3 dir)
             partial_sum += SH_C3[2] * y * (4.0f * zz - xx - yy) * c[11];
 #endif
             return partial_sum;
-            break;
 
         // Thread 3: Handles coefficients 12-15 (Last part of degree 3)
         case 3:
@@ -195,10 +192,9 @@ float3 eval_sh_partial(uint local_idx, SHCoeffs c, float3 dir)
             partial_sum += SH_C3[6] * x * (xx - 3.0f * yy) * c[15];
 #endif
             return partial_sum;
-            break;
     }
-
     return partial_sum;
+
 }
 
 [shader("mesh")]

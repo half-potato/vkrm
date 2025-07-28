@@ -80,14 +80,23 @@ inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras)
 
     // 3. Compute the covariance matrix and its eigendecomposition for PCA
     Eigen::Matrix3f covariance = positions.transpose() * positions;
-    Eigen::EigenSolver<Eigen::Matrix3f> es(covariance);
-    Eigen::Matrix3f eigvec = es.eigenvectors().real();
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> es(covariance);
 
-    // The eigenvalues are not guaranteed to be sorted, but Eigen's solver often
-    // returns them in a reasonable order. For perfect correspondence with the python
-    // script, one would sort eigenvectors by eigenvalues. Here we assume the order is sufficient.
+    // Sort eigenvectors by eigenvalues in descending order to match np.argsort
+    std::vector<std::pair<float, Eigen::Vector3f>> eigen_pairs;
+    for (int j = 0; j < 3; ++j) {
+        eigen_pairs.push_back({es.eigenvalues()[j], es.eigenvectors().col(j)});
+    }
+    std::sort(eigen_pairs.begin(), eigen_pairs.end(), [](const auto& a, const auto& b) {
+        return a.first > b.first;
+    });
 
-    // 4. Create the rotation matrix from the eigenvectors
+    Eigen::Matrix3f eigvec;
+    for (int j = 0; j < 3; ++j) {
+        eigvec.col(j) = eigen_pairs[j].second;
+    }
+
+    // 4. Create the rotation matrix from the sorted eigenvectors
     Eigen::Matrix3f rot = eigvec.transpose();
 
     // 5. Ensure a right-handed coordinate system
@@ -102,47 +111,42 @@ inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras)
 
     // 7. Apply the transformation to all camera poses
     for (auto& pair : cameras) {
-        // Get the original pose as a 4x4 matrix
-        glm::mat4 original_pose = glm::translate(glm::mat4(1.0f), pair.second.camera.position);
-        original_pose = original_pose * glm::mat4_cast(pair.second.camera.GetRotation());
+        glm::mat4 original_pose = glm::translate(glm::mat4(1.0f), pair.second.camera.position) * glm::mat4_cast(pair.second.camera.GetRotation());
 
-        // Convert to Eigen, apply transform, and convert back
-        Eigen::Matrix4f original_pose_eigen;
-        memcpy(original_pose_eigen.data(), glm::value_ptr(original_pose), sizeof(float) * 16);
-
+        Eigen::Map<const Eigen::Matrix4f> original_pose_eigen(glm::value_ptr(original_pose));
         Eigen::Matrix4f new_pose_eigen = transform * original_pose_eigen;
         
         glm::mat4 new_pose_glm;
         memcpy(glm::value_ptr(new_pose_glm), new_pose_eigen.data(), sizeof(float) * 16);
 
-        // Decompose the new matrix back into position and rotation
         pair.second.camera.position = glm::vec3(new_pose_glm[3]);
         pair.second.camera.rotation = glm::quat_cast(new_pose_glm);
     }
 
-    // The final axis flip check from the python script
-    // This heuristic orients the scene to be upright
-    float3 avg_z = float3(0.0f);
+    // --- CORRECTED FLIP HEURISTIC ---
+    // This now exactly matches the Python script's logic: poses_recentered.mean(axis=0)[2, 1] < 0
+    float avg_y_axis_z_comp = 0.0f;
     for (const auto& pair : cameras) {
-        avg_z += pair.second.camera.GetRotation() * float3(0,0,1);
+        // Get the rotation matrix of the new pose
+        glm::mat3 r = glm::mat3_cast(pair.second.camera.GetRotation());
+        // Get the element at row 2, column 1 (y_z component)
+        avg_y_axis_z_comp += r[1][2];
     }
-    avg_z = glm::normalize(avg_z);
+    avg_y_axis_z_comp /= cameras.size();
 
-    if (glm::dot(avg_z, float3(0,1,0)) < 0) {
-        glm::mat4 flip = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, -1));
-        
-        // Update the transform matrix
-        Eigen::Matrix4f flip_eigen;
-        memcpy(flip_eigen.data(), glm::value_ptr(flip), sizeof(float) * 16);
-        transform = flip_eigen * transform;
-
-        // Re-apply the flip to all poses
-        for (auto& pair : cameras) {
-             pair.second.camera.position = flip * glm::vec4(pair.second.camera.position, 1.0f);
-             pair.second.camera.rotation = glm::quat_cast(flip) * pair.second.camera.rotation;
-        }
-    }
-
+    // if (avg_y_axis_z_comp < 0) {
+    //     glm::mat4 flip = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, -1));
+    //     
+    //     Eigen::Map<const Eigen::Matrix4f> flip_eigen(glm::value_ptr(flip));
+    //     transform = flip_eigen * transform;
+    //
+    //     // Re-apply the flip to all poses
+    //     for (auto& pair : cameras) {
+    //          pair.second.camera.position = flip * glm::vec4(pair.second.camera.position, 1.0f);
+    //          pair.second.camera.rotation = glm::quat_cast(flip) * pair.second.camera.rotation;
+    //     }
+    // }
+    // --- END CORRECTION ---
 
     // Convert final Eigen transform to GLM for the return value
     glm::mat4 final_transform_glm;
@@ -221,14 +225,14 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
 
         // 3. Apply coordinate system change from Colmap (Y down, Z forward) to Graphics (Y up, Z back)
         // This is equivalent to right-multiplying the pose by a diagonal matrix with [1, -1, -1]
-        t_c2w.y *= -1.0f;
-        t_c2w.z *= -1.0f;
+        // t_c2w.y *= -1.0f;
+        // t_c2w.z *= -1.0f;
         R_c2w[1] *= -1.0f; // Flip the Y column
         R_c2w[2] *= -1.0f; // Flip the Z column
         
         quat final_rotation = glm::quat_cast(R_c2w);
         float3 final_position = t_c2w;
-        printf("xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", final_rotation.x, final_rotation.y, final_rotation.z, final_rotation.w, final_position.x, final_position.y, final_position.z);
+        printf("f xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", final_rotation.x, final_rotation.y, final_rotation.z, final_rotation.w, final_position.x, final_position.y, final_position.z);
 
         // --- END OF CORRECTED LOGIC ---
         

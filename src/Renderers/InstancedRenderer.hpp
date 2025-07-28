@@ -4,22 +4,48 @@
 
 namespace vkDelTet {
 
-class RasterRenderer { 
+class InstancedRenderer { 
 private:
     bool  wireframe = false;
     float percentTets = 1.f; // percent of tets to draw
     float densityThreshold = 0.f;
+    Mesh mesh = {};
+    MeshLayout meshLayout = {};
 
     PipelineCache renderPipeline = PipelineCache({
-        { FindShaderPath("RasterRenderer.3d.slang"), "vsmain" },
-        { FindShaderPath("RasterRenderer.3d.slang"), "fsmain" }
+        { FindShaderPath("InstancedRenderer.3d.slang"), "vsmain" },
+        { FindShaderPath("InstancedRenderer.3d.slang"), "fsmain" }
     });
 
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
         ShaderDefines defines {};
+        mesh = Mesh {
+                .indexBuffer = context.UploadData(std::vector<uint16_t>{ 
+                    0, 2, 1, 
+                    1, 2, 3, 
+                    0, 3, 2, 
+                    3, 0, 1
+                }, vk::BufferUsageFlagBits::eIndexBuffer),
+                .indexSize = sizeof(uint16_t),
+                .topology = vk::PrimitiveTopology::eTriangleList };
+        // mesh.vertexAttributes[MeshVertexAttributeType::ePosition].emplace_back(
+        //         context.UploadData(std::vector<float3>{
+        //                         float3(-.25f, -.25f, 0), float3(.25f, -.25f, 0),
+        //                         float3(-.25f,  .25f, 0), float3(.25f,  .25f, 0),
+        //                 }, vk::BufferUsageFlagBits::eVertexBuffer),
+        //         MeshVertexAttributeLayout{
+        //                 .stride = sizeof(float3),
+        //                 .format = vk::Format::eR32G32B32Sfloat,
+        //                 .offset = 0,
+        //                 .inputRate = vk::VertexInputRate::eVertex });
+        // auto &vertexShader = renderPipeline.GetShader(vk::ShaderStageFlagBits::eVertex);
+        auto &vertexShader = renderPipeline.getShader(context.GetDevice(), 0, defines);
+        meshLayout = mesh.GetLayout(*vertexShader);
 
         GraphicsPipelineInfo pipelineInfo {
-            .vertexInputState = VertexInputDescription{},
+            .vertexInputState = VertexInputDescription{
+                .bindings = meshLayout.bindings,
+                .attributes = meshLayout.attributes },
             .inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo{
                 .topology = vk::PrimitiveTopology::eTriangleList },
             .rasterizationState = vk::PipelineRasterizationStateCreateInfo{
@@ -48,8 +74,8 @@ private:
     }
 
 public:
-    inline const char* Name() const { return "HW Raster"; }
-    inline const char* Description() const { return "HW Rasterization"; }
+    inline const char* Name() const { return "InstancedRaster"; }
+    inline const char* Description() const { return "Instanced Geometry Rasterization"; }
 
     void DrawGui(CommandContext& context) {
         ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.0);
@@ -96,19 +122,16 @@ public:
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
         context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 
-        uint32_t tetCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
-        if (tetCount > 0) {
-            context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
-            context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
-            // context->draw(tetCount*12, 1, 0, 0);
-            context->drawIndirect(
-                **renderContext.drawArgs.mBuffer,  // Dereference the handle from the wrapper
-                renderContext.drawArgs.mOffset,    // Provide the buffer offset
-                1,                                     // drawCount
-                sizeof(vk::DrawIndirectCommand)        // stride
-            );
-
-        }
+        context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
+        context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
+        // context->draw(tetCount*12, 1, 0, 0);
+        mesh.Bind(context, meshLayout);
+        context->drawIndexedIndirect(
+            **renderContext.insDrawArgs.mBuffer,  // Dereference the handle from the wrapper
+            renderContext.insDrawArgs.mOffset,    // Provide the buffer offset
+            1,                                     // drawCount
+            sizeof(vk::DrawIndirectCommand)        // stride
+        );
 
         renderContext.EndRendering(context);
 
@@ -117,3 +140,4 @@ public:
 };
 
 }
+

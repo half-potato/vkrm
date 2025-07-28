@@ -21,25 +21,20 @@ uniform float2   outputResolution;
 
 struct v2f {
     float4 pos : SV_Position;
-    
-    // Intersection data, interpolated over triangles in a tet
+
     float dc_dt;
     float3 rayDir;
     float4 planeNumerators;
     float4 planeDenominators;
 
-
-    // Tet data, constant for vertices in a tet
-    nointerpolation float  tetDensity;
+    nointerpolation float tetDensity;
     nointerpolation float3 baseColor;
 };
 
+
 [shader("vertex")]
-v2f vsmain(in uint vertexId: SV_VertexID) {
-    // 12 vertices per tet
-    const uint rawTetId = sortPayloads[vertexId / 12];
-    const uint tetId = rawTetId;
-    
+v2f vsmain(in uint vertexId : SV_VertexID, in uint instanceId : SV_InstanceID) {
+    const uint tetId = sortPayloads[instanceId];
     v2f o = {};
 
     o.tetDensity = scene.load_tet_density(tetId);
@@ -48,10 +43,7 @@ v2f vsmain(in uint vertexId: SV_VertexID) {
         // o.tetVertices   = scene.load_tet_vertices(tetId);
         float4x3 verts = scene.load_tet_vertices(tetId);
 
-        // 4 tris per tet
-        const uint triId = (vertexId%12) / 3;
-        const uint3 tri = TetrahedronScene::kTetTriangles[triId];
-        const float3 vertex = verts[tri[vertexId%3]];
+        const float3 vertex = verts[vertexId];
 
         // o.pos = mul(viewProjection, float4(vertex, 1));
         o.pos = mul(float4(vertex, 1), transpose(viewProjection));
@@ -80,14 +72,6 @@ v2f vsmain(in uint vertexId: SV_VertexID) {
 
 [shader("fragment")]
 float4 fsmain(v2f v, float4 fragPos : SV_Position) : SV_Target {
-    // float2 ndc_xy = (fragPos.xy / outputResolution) * 2.0 - 1.0;
-    // float4 ndc = float4(ndc_xy, fragPos.z, 1.0);
-    // float4 world_pos_h = mul(invProjection, ndc);
-    // float3 world_pos = world_pos_h.xyz / world_pos_h.w;
-    // float3 rayDir = normalize(world_pos - rayOrigin);
-
-    // if (v.tetDensity <= densityThreshold)
-    //     return float4(0,0,0,1);
 
     {
         const float d = length(v.rayDir);
@@ -109,9 +93,6 @@ float4 fsmain(v2f v, float4 fragPos : SV_Position) : SV_Target {
         max(t_enter.x, max(t_enter.y, max(t_enter.z, t_enter.w))),
         min(t_exit.x, min(t_exit.y, min(t_exit.z, t_exit.w)))
     );
-    
-    // bool parallel_miss = any((abs(v.planeDenominators) < 1e-6f) & (v.planeNumerators > 0.0f));
-    // if (parallel_miss) return float4(0,0,0,1);
 
     opticalDepth *= t.y - t.x;
     const float T = exp(-opticalDepth);

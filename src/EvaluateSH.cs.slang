@@ -157,7 +157,7 @@ void main(uint3 index: SV_DispatchThreadID) {
     c += eval_deg3(coeffs, dir);
     #endif
 
-    // c = softplus(c, 10);
+    c = softplus(c, 10);
 
     // float3 center = spheres[tetId].xyz;
     // float4x3 tet   = scene.load_tet_vertices(tetId);

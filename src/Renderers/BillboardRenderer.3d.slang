@@ -6,7 +6,7 @@ import SortUtils;
 using namespace vkDelTet;
 
 ParameterBlock<TetrahedronScene> scene;
-StructuredBuffer<uint2> sortBuffer;
+StructuredBuffer<uint> sortPayloads;
 ByteAddressBuffer tetColors; // precomputed SH data
 
 uniform float4x4 viewProjection;
@@ -28,7 +28,8 @@ struct v2f {
 
 [shader("vertex")]
 v2f vsmain(uint tetId : SV_VertexID, out float psize : SV_PointSize) {
-    tetId = sortBuffer[tetId].y;
+    // tetId = sortBuffer[tetId].y;
+    tetId = sortPayloads[tetId];
 
     v2f o = {};
 
