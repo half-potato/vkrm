@@ -61,9 +61,9 @@ T ReadBinaryLittleEndian(std::istream* stream) {
     return LittleEndianToNative(data_little_endian);
 }
 
-inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras) {
+Eigen::Matrix4f PosesPCA(std::map<std::string, ColmapCamera>& cameras) {
     if (cameras.empty()) {
-        return glm::mat4(1.0f);
+        return Eigen::Matrix4f::Identity();
     }
 
     // 1. Extract all camera positions (translations) into an Eigen matrix
@@ -108,7 +108,10 @@ inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras)
     Eigen::Matrix4f transform = Eigen::Matrix4f::Identity();
     transform.block<3, 3>(0, 0) = rot;
     transform.block<3, 1>(0, 3) = rot * -t_mean;
+    return transform;
+}
 
+void TransformCameras(std::map<std::string, ColmapCamera>& cameras, Eigen::Matrix4f& transform) {
     // 7. Apply the transformation to all camera poses
     for (auto& pair : cameras) {
         glm::mat4 original_pose = glm::translate(glm::mat4(1.0f), pair.second.camera.position) * glm::mat4_cast(pair.second.camera.GetRotation());
@@ -122,39 +125,7 @@ inline glm::mat4 TransformPosesPCA(std::map<std::string, ColmapCamera>& cameras)
         pair.second.camera.position = glm::vec3(new_pose_glm[3]);
         pair.second.camera.rotation = glm::quat_cast(new_pose_glm);
     }
-
-    // --- CORRECTED FLIP HEURISTIC ---
-    // This now exactly matches the Python script's logic: poses_recentered.mean(axis=0)[2, 1] < 0
-    float avg_y_axis_z_comp = 0.0f;
-    for (const auto& pair : cameras) {
-        // Get the rotation matrix of the new pose
-        glm::mat3 r = glm::mat3_cast(pair.second.camera.GetRotation());
-        // Get the element at row 2, column 1 (y_z component)
-        avg_y_axis_z_comp += r[1][2];
-    }
-    avg_y_axis_z_comp /= cameras.size();
-
-    // if (avg_y_axis_z_comp < 0) {
-    //     glm::mat4 flip = glm::scale(glm::mat4(1.0f), glm::vec3(1, -1, -1));
-    //     
-    //     Eigen::Map<const Eigen::Matrix4f> flip_eigen(glm::value_ptr(flip));
-    //     transform = flip_eigen * transform;
-    //
-    //     // Re-apply the flip to all poses
-    //     for (auto& pair : cameras) {
-    //          pair.second.camera.position = flip * glm::vec4(pair.second.camera.position, 1.0f);
-    //          pair.second.camera.rotation = glm::quat_cast(flip) * pair.second.camera.rotation;
-    //     }
-    // }
-    // --- END CORRECTION ---
-
-    // Convert final Eigen transform to GLM for the return value
-    glm::mat4 final_transform_glm;
-    memcpy(glm::value_ptr(final_transform_glm), transform.data(), sizeof(float) * 16);
-
-    return final_transform_glm;
 }
-
 
 std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSparsePath, const float zNear, const int fovXfovYFlag)
 {
@@ -216,7 +187,6 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
         t_w2c.y = ReadBinaryLittleEndian<double>(&imagesFile);
         t_w2c.z = ReadBinaryLittleEndian<double>(&imagesFile);
 
-        printf("xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", q_w2c.x, q_w2c.y, q_w2c.z, q_w2c.w, t_w2c.x, t_w2c.y, t_w2c.z);
 
         // 2. Invert the W2C transform to get the Camera-to-World (C2W) pose
         mat3 R_w2c = glm::mat3_cast(q_w2c);
@@ -232,7 +202,6 @@ std::map<std::string, ColmapCamera> loadColmapBin(const std::string& colmapSpars
         
         quat final_rotation = glm::quat_cast(R_c2w);
         float3 final_position = t_c2w;
-        printf("f xyzw: %f, %f, %f, %f, t: %f, %f, %f\n", final_rotation.x, final_rotation.y, final_rotation.z, final_rotation.w, final_position.x, final_position.y, final_position.z);
 
         // --- END OF CORRECTED LOGIC ---
         

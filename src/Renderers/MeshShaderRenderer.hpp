@@ -88,7 +88,7 @@ public:
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"] = viewProjection;
             params["rayOrigin"] = rayOrigin;
-            params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale() * renderContext.scene.MaxDensity();
+            params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale();
             for (uint32_t i = 0; i < renderContext.scene.TetSH().size(); i++)
                     params["shCoeffs"][i] = (BufferParameter)renderContext.scene.TetSH()[i];
             params["tetCentroids"]    = (BufferParameter)renderContext.scene.TetCentroids();

@@ -40,6 +40,7 @@ private:
 	inline auto CallRendererFn(auto&& fn) { return CallRendererFn_<0>(fn, rendererIndex); }
 
 public:
+	uint64_t frame_count = 0;
 	RenderContext renderContext;
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
@@ -124,6 +125,7 @@ public:
 			CallRendererFn([&](auto& r){ r.Render(context, renderContext); });
 			context.PopDebugLabel();
 		}
+		frame_count++;
 	}
 };
 

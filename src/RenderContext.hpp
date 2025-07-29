@@ -12,61 +12,6 @@
 
 namespace vkDelTet {
 
-template<typename T>
-void DebugPrintBuffer(
-	const RoseEngine::ref<RoseEngine::Device>& device,
-    RoseEngine::BufferRange<T>  gpuSourceBuffer,
-    const std::string&          label,
-    size_t                      maxElementsToPrint = 32)
-{
-    const size_t sizeInBytes = gpuSourceBuffer.size_bytes();
-    if (sizeInBytes == 0) return;
-
-    // 1. Create a staging buffer on the CPU
-    auto stagingBuffer = RoseEngine::Buffer::Create(
-        *device,
-        sizeInBytes,
-		vk::BufferUsageFlagBits::eTransferDst,
-		vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-		VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-	);
-
-    // 2. Create a dedicated, one-shot command buffer for this operation
-    auto tempContext = RoseEngine::CommandContext::Create(device);
-    tempContext->Begin();
-
-    // 3. Record the copy command and a barrier
-    // Note: Your Copy function likely adds barriers, but being explicit is good.
-    tempContext->AddBarrier(gpuSourceBuffer, {
-        .stage  = vk::PipelineStageFlagBits2::eTransfer,
-        .access = vk::AccessFlagBits2::eTransferRead
-    });
-    tempContext->Copy(gpuSourceBuffer, stagingBuffer);
-
-    // 4. Submit the work and wait for the GPU to finish
-    tempContext->Submit();
-    device->Wait();
-
-    // 5. Map the staging buffer's memory and print the data
-	T* data = static_cast<BufferRange<T>>(stagingBuffer).data();
-    if (data)
-    {
-        std::cout << "--- " << label << " (" << gpuSourceBuffer.size() << " elements) ---\n";
-        for (size_t i = 0; i < std::min(gpuSourceBuffer.size(), maxElementsToPrint); ++i)
-        {
-            std::cout << "[" << i << "]: " << data[i] << "\n";
-        }
-        if (gpuSourceBuffer.size() > maxElementsToPrint) {
-            std::cout << "...\n";
-        }
-        std::cout << std::flush;
-    }
-
-    // `tempContext` and `stagingBuffer` are now destroyed safely.
-}
-
-
-
 // helper for drawing with transmittance in the alpha channel
 struct RenderContext {
 private:
