@@ -7,6 +7,12 @@ ParameterBlock<TetrahedronScene> scene;
 uniform float4x4 viewProjection;
 StructuredBuffer<uint> selection;
 uniform float2 outputResolution;
+uniform float2 mousePos;
+uniform float selectionRadius;
+
+RWByteAddressBuffer candidateCount;
+RWStructuredBuffer<uint> sortKeys;
+RWStructuredBuffer<float> sortPayloads;
 
 struct v2f {
     float4 pos : SV_Position;
@@ -39,4 +45,26 @@ v2f vsmain(out float psize : SV_PointSize, uint instanceId : SV_InstanceID) {
 float4 fsmain(v2f i) : SV_Target {
     // Output a bright, constant color for the highlight. Yellow is a good choice.
     return float4(1.0, 1.0, 0.0, 1.0); // Bright Yellow
+}
+
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void select(uint3 threadId: SV_DispatchThreadID) {
+    uint vertId = threadId.x;
+    float3 vert = scene.load_vertex(vertId);
+    float4 clipPos = mul(viewProjection, float4(vert, 1.0));
+    float3 ndcPos = float3(clipPos.x, clipPos.y, clipPos.z) / clipPos.w;
+    float2 screenPos = {
+        (ndcPos.x + 1.0f) * 0.5f * outputResolution.x,
+        (ndcPos.y + 1.0f) * 0.5f * outputResolution.y
+    };
+
+    float dx = screenPos.x - mousePos.x;
+    float dy = screenPos.y - mousePos.y;
+    if ((dx * dx + dy * dy) < (selectionRadius * selectionRadius)) {
+        uint listIndex;
+        candidateCount.InterlockedAdd(0, 1, listIndex);
+        sortKeys[vertId] = vertId;
+        sortPayloads[vertId] = clipPos.z;
+    }
 }

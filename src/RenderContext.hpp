@@ -25,6 +25,7 @@ private:
 	PipelineCache scanPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "prefix_sum");
 	PipelineCache scatterPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "compact_tets");
 	PipelineCache scan2Pipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "scan_blocks_atomic");
+	PipelineCache emitPipeline      = PipelineCache(FindShaderPath("Culling.cs.slang"), "emitArgs");
 
 	RadixSort radixSort;
 	DeviceRadixSort dRadixSort;
@@ -148,6 +149,7 @@ public:
 				.access = vk::AccessFlagBits2::eShaderRead
 			});
 			context.ExecuteBarriers();
+
 			Pipeline& scan2 = *scan2Pipeline.get(context.GetDevice());
 			context.Fill(blockSumAtomicCounter.cast<uint32_t>(), 0u);
 			auto descriptorSets3 = context.GetDescriptorSets(*scan.Layout());
@@ -160,10 +162,20 @@ public:
 			});
 			context.ExecuteBarriers();
 
-			Pipeline& scatter = *scatterPipeline.get(context.GetDevice());
-			auto descriptorSets4 = context.GetDescriptorSets(*scatter.Layout());
-			context.UpdateDescriptorSets(*descriptorSets4, params, *scatter.Layout());
-			context.Dispatch(scatter, scene.TetCount(), *descriptorSets4);
+			// Pipeline& scatter = *scatterPipeline.get(context.GetDevice());
+			// auto descriptorSets4 = context.GetDescriptorSets(*scatter.Layout());
+			// context.UpdateDescriptorSets(*descriptorSets4, params, *scatter.Layout());
+			// context.Dispatch(scatter, scene.TetCount(), *descriptorSets4);
+
+			Pipeline& emit = *emitPipeline.get(context.GetDevice());
+			auto descriptorSets5 = context.GetDescriptorSets(*emit.Layout());
+			context.UpdateDescriptorSets(*descriptorSets5, params, *emit.Layout());
+			context.Dispatch(emit, 1, *descriptorSets5);
+			// context.AddBarrier(scannedOffsets, {
+			// 	.stage  = vk::PipelineStageFlagBits2::eComputeShader,
+			// 	.access = vk::AccessFlagBits2::eShaderRead
+			// });
+			// context.ExecuteBarriers();
 
 			context.PopDebugLabel();
 		}
@@ -244,12 +256,12 @@ public:
 	}
 
 	inline void ContinueRendering(CommandContext& context) {
-		context.AddBarrier(renderTarget, Image::ResourceState{
-			.layout = vk::ImageLayout::eColorAttachmentOptimal,
-			.stage  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-			.access =  vk::AccessFlagBits2::eColorAttachmentRead|vk::AccessFlagBits2::eColorAttachmentWrite,
-			.queueFamily = context.QueueFamily() });
-		context.ExecuteBarriers();
+		// context.AddBarrier(renderTarget, Image::ResourceState{
+		// 	.layout = vk::ImageLayout::eColorAttachmentOptimal,
+		// 	.stage  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+		// 	.access =  vk::AccessFlagBits2::eColorAttachmentRead|vk::AccessFlagBits2::eColorAttachmentWrite,
+		// 	.queueFamily = context.QueueFamily() });
+		// context.ExecuteBarriers();
 
 		vk::RenderingAttachmentInfo attachments[1] = {
 			vk::RenderingAttachmentInfo {

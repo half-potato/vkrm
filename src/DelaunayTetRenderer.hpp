@@ -47,8 +47,10 @@ public:
 	RenderContext renderContext;
 	inline void LoadScene(CommandContext& context, const std::filesystem::path& p) {
 		renderContext.scene.Load(context, p);
-		if (renderContext.scene.VertexCount() > 0)
+		if (renderContext.scene.VertexCount() > 0) {
 			renderContext.PrepareScene(context, renderContext.scene.GetShaderParameter());
+			m_highlightRenderer.PrepareBuffers(context, renderContext.scene);
+		}
 	}
 
 	inline void DrawPropertiesGui(CommandContext& context) {
@@ -134,11 +136,11 @@ public:
 			ImVec2 relativeMousePos = {absoluteMousePos.x - viewportMin.x, absoluteMousePos.y - viewportMin.y};
 			if (m_highlightRenderer.GetState() == SelectionState::IDLE) {
 				// SELECTING NEW POINTS
-				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
 					if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
-						m_highlightRenderer.ExtendSelection();
+						m_highlightRenderer.ExtendSelection(context);
 					} else {
-						m_highlightRenderer.m_selection.clear();
+						m_highlightRenderer.ClearSelection();
 					}
 
 					m_highlightRenderer.UpdateCandidates(
@@ -158,6 +160,7 @@ public:
 					m_highlightRenderer.BeginGrab(renderContext.scene, viewmat);
 				}
 			} else if (m_highlightRenderer.GetState() == SelectionState::GRABBING) {
+				printf("Handling grab\n");
 				m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat);
 
 				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -168,7 +171,6 @@ public:
 				}
 			}
 		}
-		m_highlightRenderer.PreRender(context);
 
 		if (renderContext.scene.TetCount() == 0) {
 			context.ClearColor(renderContext.renderTarget, vk::ClearColorValue{std::array<float,4>{ 0, 0, 0, 0 }});
@@ -179,11 +181,7 @@ public:
 		}
 
 
-        renderContext.ContinueRendering(context);
-        context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
-        context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 		m_highlightRenderer.Render(context, renderContext);
-		context->endRendering();
 
 		frame_count++;
 	}

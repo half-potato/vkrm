@@ -65,6 +65,16 @@ void markTets(uint3 threadId: SV_DispatchThreadID) {
     float density = scene.load_tet_density(tetId);
     bool visible = in_frustum && !(extent.x * extent.y < 1);
 
+    // if (visible) {
+    //     // Atomically increment the counter and get the previous value.
+    //     // This gives us a unique, dense index for this visible tet.
+    //     uint old;
+    //     blockSumAtomicCounter.InterlockedAdd(0, 1, old);
+    //
+    //     // Write the original tetId to the new, compact list.
+    //     // markedTets.Store<uint>(tetId * sizeof(uint), 1);
+    // }
+
     // Write 1 if visible, 0 otherwise
     markedTets.Store<uint>(tetId * sizeof(uint), visible ? 1 : 0);
 }
@@ -212,4 +222,30 @@ void compact_tets(uint3 threadId: SV_DispatchThreadID) {
         insDrawArgs.Store<uint>(sizeof(uint)*3, 0);
         insDrawArgs.Store<uint>(sizeof(uint)*4, 0);
     }
+}
+
+[shader("compute")]
+[numthreads(1, 1, 1)]
+void emitArgs(uint3 threadId: SV_DispatchThreadID) {
+    uint totalVisibleCount = blockSumAtomicCounter.Load<uint>(0);
+    
+    drawArgs.Store<uint>(sizeof(uint)*0, totalVisibleCount * 12);
+    drawArgs.Store<uint>(sizeof(uint)*1, 1);
+    drawArgs.Store<uint>(sizeof(uint)*2, 0);
+    drawArgs.Store<uint>(sizeof(uint)*3, 0);
+
+    uint groupCountX = (totalVisibleCount + TETS_PER_GROUP - 1) / TETS_PER_GROUP;
+    meshDrawArgs.Store<uint>(sizeof(uint)*0, groupCountX);
+    meshDrawArgs.Store<uint>(sizeof(uint)*1, 1);
+    meshDrawArgs.Store<uint>(sizeof(uint)*2, 1);
+    uint workgroupSize = 32;
+    kernelArgs.Store<uint>(sizeof(uint)*0, (totalVisibleCount + workgroupSize - 1) / workgroupSize);
+    kernelArgs.Store<uint>(sizeof(uint)*1, 1);
+    kernelArgs.Store<uint>(sizeof(uint)*2, 1);
+
+    insDrawArgs.Store<uint>(sizeof(uint)*0, 3 * 4);
+    insDrawArgs.Store<uint>(sizeof(uint)*1, totalVisibleCount);
+    insDrawArgs.Store<uint>(sizeof(uint)*2, 0);
+    insDrawArgs.Store<uint>(sizeof(uint)*3, 0);
+    insDrawArgs.Store<uint>(sizeof(uint)*4, 0);
 }

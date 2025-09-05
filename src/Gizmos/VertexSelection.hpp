@@ -21,6 +21,9 @@ private:
     std::vector<uint32_t> m_sortedCandidates;
     int m_currentIndex = -1;
     float m_selectionRadius = 10.0f; // Default radius of 10 pixels
+	BufferRange<uint>   candidateCount;
+	BufferRange<uint>   sortKeys;
+	BufferRange<uint>   sortPayloads;
 
 	// Grab state
 	SelectionState m_state = SelectionState::IDLE;
@@ -32,6 +35,7 @@ private:
         { FindShaderPath("VertexHighlight.slang"), "vsmain" },
         { FindShaderPath("VertexHighlight.slang"), "fsmain" }
     });
+	PipelineCache select_pipeline = PipelineCache(FindShaderPath("VertexHighlight.slang"), "select");
 
 
 	inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
@@ -75,8 +79,44 @@ private:
 
 		return *m_pipeline.get(context.GetDevice(), {}, pipelineInfo).get();
 	}
+    void ResizeGpuBufferIfNeeded(CommandContext& context, size_t requiredSize) {
+        // Only resize if the buffer doesn't exist or its current capacity is too small.
+        if (!m_selectionGpuBuffer || m_selectionGpuBuffer.size() < requiredSize) {
+            // Grow by 1.5x to avoid reallocating on every single addition.
+            // Ensure a minimum size for small selections.
+            size_t newCapacity = std::max(static_cast<size_t>(requiredSize * 1.5f), (size_t)32);
 
+			// m_selectionGpuBuffer = Buffer::Create(
+			// 	context.GetDevice(),
+			// 	newCapacity * sizeof(uint),
+			// 	vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
+            m_selectionGpuBuffer = Buffer::Create(
+                context.GetDevice(),
+                newCapacity * sizeof(uint32_t),
+                // USAGE: Must be a storage buffer for the shader to read.
+                vk::BufferUsageFlagBits::eStorageBuffer,
+                // MEMORY: Must be host-visible so the CPU can write to it.
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                // ALLOCATION: Must be mapped for the .data() pointer to be valid.
+                VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+            );
+             printf("Allocated new selection buffer with capacity for %zu elements.\n", newCapacity);
+        }
+    }
 public:
+	inline void PrepareBuffers(
+		CommandContext& context,
+		const TetrahedronScene& scene)
+	{
+		if (!candidateCount || candidateCount.size() != 1)
+			candidateCount = Buffer::Create(context.GetDevice(), sizeof(uint), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
+		if (!sortKeys || sortKeys.size() != scene.VertexCount())
+			sortKeys = Buffer::Create(context.GetDevice(), sizeof(uint)*scene.VertexCount(), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
+		if (!sortPayloads || sortPayloads.size() != scene.VertexCount())
+			sortPayloads = Buffer::Create(context.GetDevice(), sizeof(float)*scene.VertexCount(), vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst);
+		ResizeGpuBufferIfNeeded(context, 32);
+	}
+
 	std::vector<uint32_t> GetSelection() {
 		std::unordered_set<uint32_t> finalSelection(m_selection.begin(), m_selection.end());
 		if (m_currentIndex >= 0 && !m_sortedCandidates.empty()) {
@@ -85,10 +125,15 @@ public:
 		return std::vector<uint32_t>(finalSelection.begin(), finalSelection.end());
 	}
 
-	void ExtendSelection() {
+	void ExtendSelection(CommandContext& context) {
 		if (m_currentIndex >= 0 && !m_sortedCandidates.empty()) {
 			m_selection.insert(m_sortedCandidates[m_currentIndex]);
+			ResizeGpuBufferIfNeeded(context, m_selection.size());
 		}
+	}
+
+	void ClearSelection() {
+		m_selection.clear();
 	}
 
 	void MoveSelection(CommandContext& context, TetrahedronScene &scene, float3 vector) {
@@ -105,20 +150,21 @@ public:
     inline SelectionState GetState() const { return m_state; }
 
 	void BeginGrab(TetrahedronScene& scene, const glm::mat4& viewProj) {
+		auto selection = GetSelection();
+		if (selection.empty()) return;
 		printf("Begin grab\n");
-		if (m_selection.empty()) return;
 
 		m_state = SelectionState::GRABBING;
 		m_initialVertexPositions.clear();
 		
 		// Calculate the average position (anchor) and store initial positions
 		m_grabAnchorPoint3D = {0,0,0};
-		for (const uint32_t id : m_selection) {
+		for (const uint32_t id : selection) {
 			const float3& pos = scene.vertices_cpu[id];
 			m_initialVertexPositions[id] = pos;
 			m_grabAnchorPoint3D += pos;
 		}
-		m_grabAnchorPoint3D /= m_selection.size();
+		m_grabAnchorPoint3D /= selection.size();
 
 		// Project the 3D anchor to get the depth in NDC [-1, 1] for the move plane
 		glm::vec4 clipPos = viewProj * glm::vec4(m_grabAnchorPoint3D, 1.0f);
@@ -239,14 +285,6 @@ public:
 			m_sortedCandidates.size()-1);
     }
 
-	void PreRender(CommandContext& context) {
-		auto selection = GetSelection();
-		if (selection.empty()) {
-			return;
-		}
-		m_selectionGpuBuffer = Buffer::Create(context.GetDevice(), selection, vk::BufferUsageFlagBits::eStorageBuffer);
-	}
-
     void Render(CommandContext& context, RenderContext& renderContext) {
         // Render the currently selected vertex from our internal list
 		auto selection = GetSelection();
@@ -254,6 +292,7 @@ public:
 			return;
 		}
 		// m_selectionGpuBuffer = Buffer::Create(context.GetDevice(), selection, vk::BufferUsageFlagBits::eStorageBuffer);
+		std::memcpy(m_selectionGpuBuffer.data(), std::ranges::data(selection), selection.size() * sizeof(uint));
 
         context.PushDebugLabel("VertexHighlightRenderer");
         Pipeline& pipeline = GetPipeline(context, renderContext);
@@ -269,16 +308,19 @@ public:
             params["scene"] = renderContext.scene.GetShaderParameter();
             params["viewProjection"] = projection * worldToCamera * sceneToWorld;
             params["selection"] = (BufferParameter)m_selectionGpuBuffer;
-            // params["selection_size"] = selection.size();
+            params["mousePos"] = float2(0.f, 0.f);
+            params["selectionRadius"] = 0.f;
 
             context.UpdateDescriptorSets(*descriptorSets, params, *pipeline.Layout());
         }
 
+        renderContext.ContinueRendering(context);
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1 });
         context->setScissor(0, vk::Rect2D{ {0, 0}, { extent.x, extent.y } });
         context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
         context.BindDescriptors(*pipeline.Layout(), *descriptorSets);
         context->draw(1, selection.size(), 0, 0);
+		context->endRendering();
 
         context.PopDebugLabel();
     }
