@@ -12,6 +12,7 @@
 #include "Renderers/InstancedRenderer.hpp"
 #include "Renderers/PointCloudRenderer.hpp"
 #include "Renderers/BillboardRenderer.hpp"
+#include "Gizmos/VertexSelection.hpp"
 
 namespace vkDelTet {
 
@@ -24,6 +25,8 @@ private:
 		InstancedRenderer,
 		PointCloudRenderer
 	> renderers;
+	VertexHighlightRenderer m_highlightRenderer;
+
 	uint32_t rendererIndex = 0;
 
 
@@ -116,7 +119,56 @@ public:
 		// Draw the renderTarget image, scaling it to the ImGui window size
 		ImGui::Image(Gui::GetTextureID(renderContext.renderTarget, vk::Filter::eNearest), std::bit_cast<ImVec2>(displayExtentf));
 
+        const uint2    extent = (uint2)renderContext.renderTarget.Extent();
+
+        const float4x4 sceneToWorld  = renderContext.scene.Transform();
+		const float4x4 worldToCamera = inverse(renderContext.camera.GetCameraToWorld());
+		const float4x4 projection = renderContext.camera.GetProjection((float)extent.x / (float)extent.y);
+		const float4x4 viewmat = projection * worldToCamera * sceneToWorld;
 		renderContext.camera.Update(dt);
+		if (ImGui::IsWindowHovered()) {
+			ImVec2 absoluteMousePos = ImGui::GetMousePos();
+			ImVec2 windowPos = ImGui::GetWindowPos();
+			ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
+			ImVec2 viewportMin = {windowPos.x + contentMin.x, windowPos.y + contentMin.y};
+			ImVec2 relativeMousePos = {absoluteMousePos.x - viewportMin.x, absoluteMousePos.y - viewportMin.y};
+			if (m_highlightRenderer.GetState() == SelectionState::IDLE) {
+				// SELECTING NEW POINTS
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+					if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
+						m_highlightRenderer.ExtendSelection();
+					} else {
+						m_highlightRenderer.m_selection.clear();
+					}
+
+					m_highlightRenderer.UpdateCandidates(
+						relativeMousePos, viewmat, extent, 
+						renderContext.scene.vertices_cpu);
+				}
+				// ADJUSTING SELECTION
+				float mouseWheel = ImGui::GetIO().MouseWheel;
+				if (mouseWheel > 0) {
+					m_highlightRenderer.CycleSelection(1);
+				} else if (mouseWheel < 0) {
+					m_highlightRenderer.CycleSelection(-1);
+				}
+
+				// MOVING POINTS
+				if (ImGui::IsKeyPressed(ImGuiKey_G)) {
+					m_highlightRenderer.BeginGrab(renderContext.scene, viewmat);
+				}
+			} else if (m_highlightRenderer.GetState() == SelectionState::GRABBING) {
+				m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat);
+
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+					m_highlightRenderer.ConfirmGrab();
+				}
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+					m_highlightRenderer.CancelGrab(context, renderContext.scene);
+				}
+			}
+		}
+		m_highlightRenderer.PreRender(context);
 
 		if (renderContext.scene.TetCount() == 0) {
 			context.ClearColor(renderContext.renderTarget, vk::ClearColorValue{std::array<float,4>{ 0, 0, 0, 0 }});
@@ -125,6 +177,14 @@ public:
 			CallRendererFn([&](auto& r){ r.Render(context, renderContext); });
 			context.PopDebugLabel();
 		}
+
+
+        renderContext.ContinueRendering(context);
+        context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
+        context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
+		m_highlightRenderer.Render(context, renderContext);
+		context->endRendering();
+
 		frame_count++;
 	}
 };

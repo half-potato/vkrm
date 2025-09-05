@@ -67,7 +67,7 @@ int main(int argc, const char** argv) {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_EXT_MESH_SHADER_EXTENSION_NAME
     });
-    app.swapchain->SetPresentMode(vk::PresentModeKHR::eFifoLatestReady);
+    app.swapchain->SetPresentMode(vk::PresentModeKHR::eImmediate);
 
     // --- Camera Loading and Filtering ---
     auto allCamerasMap = loadColmapBin(colmapSparsePath, 0.2f, fovXfovYFlag);

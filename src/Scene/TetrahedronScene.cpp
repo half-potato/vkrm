@@ -4,6 +4,7 @@
 #include <Rose/Core/DxgiFormatConvert.h>
 #include <Rose/Core/Gui.hpp>
 #include "TetrahedronScene.hpp"
+#include <glm/gtc/packing.hpp>
 
 // matches the value in EvaluateSH.cs.slang
 #define COEFFS_PER_BUF 16
@@ -102,6 +103,10 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 
 	bool compressDensities = false;
 	bool compressSH = true;
+    vertices_cpu = std::vector<float3> (pos.begin(), pos.end());
+    densities_cpu = std::vector<float> (dens.begin(), dens.end());
+    gradients_cpu = std::vector<float3> (grad.begin(), grad.end());
+    indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
 	
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices       = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
@@ -133,6 +138,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32Sfloat);
 		}
 
+		// sh_cpu = std::vector<float3> (grad.begin(), grad.end());
 		std::cout << std::endl << "SH Size" << sh.size() << ", " << sh[0].size() << std::endl;
 		tetSH.resize(sh.size());
 		for (uint32_t i = 0; i < sh.size(); i++)
@@ -156,14 +162,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		}
 	}
 
-	{
-		ShaderParameter parameters = {};
-		parameters["scene"] = GetShaderParameter();
-		parameters["outputSpheres"] = (BufferParameter)tetCircumspheres;
-		parameters["outputCentroids"] = (BufferParameter)tetCentroids;
-		parameters["outputOffsets"] = (BufferParameter)tetOffsets;
-		context.Dispatch(*createSpheresPipeline.get(context.GetDevice()), (uint32_t)tetCircumspheres.size(), parameters);
-	}
+	CalculateSpheres(context);
 }
 
 ShaderParameter TetrahedronScene::GetShaderParameter() {
@@ -211,3 +210,4 @@ void TetrahedronScene::DrawGui(CommandContext& context) {
 	ImGui::Separator();
 	Gui::ScalarField("Density scale", &densityScale, 0.f, 1e4f, 0.01f);
 }
+

@@ -243,6 +243,33 @@ public:
 			.pColorAttachments = attachments });
 	}
 
+	inline void ContinueRendering(CommandContext& context) {
+		context.AddBarrier(renderTarget, Image::ResourceState{
+			.layout = vk::ImageLayout::eColorAttachmentOptimal,
+			.stage  = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+			.access =  vk::AccessFlagBits2::eColorAttachmentRead|vk::AccessFlagBits2::eColorAttachmentWrite,
+			.queueFamily = context.QueueFamily() });
+		context.ExecuteBarriers();
+
+		vk::RenderingAttachmentInfo attachments[1] = {
+			vk::RenderingAttachmentInfo {
+				.imageView = *renderTarget,
+				.imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+				.resolveMode = vk::ResolveModeFlagBits::eNone,
+				.resolveImageView = {},
+				.resolveImageLayout = vk::ImageLayout::eUndefined,
+				.loadOp  = vk::AttachmentLoadOp::eLoad,
+				.storeOp = vk::AttachmentStoreOp::eStore,
+			}
+		};
+		context->beginRendering(vk::RenderingInfo {
+			.renderArea = vk::Rect2D{ {0, 0},  { renderTarget.Extent().x, renderTarget.Extent().y } },
+			.layerCount = 1,
+			.viewMask = 0,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = attachments });
+	}
+
 	inline void EndRendering(CommandContext& context) {
 		context->endRendering();
 
