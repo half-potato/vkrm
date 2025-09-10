@@ -1,3 +1,4 @@
+import SortUtils;
 import Scene.TetrahedronScene;
 
 using namespace vkDelTet;
@@ -10,9 +11,10 @@ uniform float2 outputResolution;
 uniform float2 mousePos;
 uniform float selectionRadius;
 
-RWByteAddressBuffer candidateCount;
+RWByteAddressBuffer b_numCandidates;
 RWStructuredBuffer<uint> sortKeys;
-RWStructuredBuffer<float> sortPayloads;
+RWStructuredBuffer<uint> sortPayloads;
+RWStructuredBuffer<uint2> sortBuffer;
 
 struct v2f {
     float4 pos : SV_Position;
@@ -24,6 +26,7 @@ v2f vsmain(out float psize : SV_PointSize, uint instanceId : SV_InstanceID) {
 
     // For testing, you're loading a fixed vertex. Remember to switch this back.
     uint vertexToDrawId = selection[instanceId];
+    // uint vertexToDrawId = sortKeys[instanceId];
     float3 vertexPos = scene.load_vertex(vertexToDrawId);
 
     // Transform the vertex position into clip space
@@ -49,7 +52,7 @@ float4 fsmain(v2f i) : SV_Target {
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
-void select(uint3 threadId: SV_DispatchThreadID) {
+void select_kernel(uint3 threadId: SV_DispatchThreadID) {
     uint vertId = threadId.x;
     float3 vert = scene.load_vertex(vertId);
     float4 clipPos = mul(viewProjection, float4(vert, 1.0));
@@ -61,10 +64,15 @@ void select(uint3 threadId: SV_DispatchThreadID) {
 
     float dx = screenPos.x - mousePos.x;
     float dy = screenPos.y - mousePos.y;
-    if ((dx * dx + dy * dy) < (selectionRadius * selectionRadius)) {
+    sortKeys[vertId] = vertId;
+    if ((dx * dx + dy * dy) < (selectionRadius * selectionRadius) && clipPos.w > 0.f) {
         uint listIndex;
-        candidateCount.InterlockedAdd(0, 1, listIndex);
-        sortKeys[vertId] = vertId;
-        sortPayloads[vertId] = clipPos.z;
+        b_numCandidates.InterlockedAdd(0, 1, listIndex);
+
+        sortBuffer[vertId] = uint2(order_preserving_float_map(clipPos.z), vertId);
+        // sortPayloads[vertId] = order_preserving_float_map(clipPos.z);
+    } else {
+        sortBuffer[vertId] = uint2(0, vertId);
+        // sortPayloads[vertId] = order_preserving_float_map(999999.9f);
     }
 }

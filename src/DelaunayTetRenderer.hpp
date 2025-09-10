@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iterator>
 #include <stack>
 
 #include <Rose/Core/CommandContext.hpp>
@@ -133,10 +134,10 @@ public:
 			ImVec2 windowPos = ImGui::GetWindowPos();
 			ImVec2 contentMin = ImGui::GetWindowContentRegionMin();
 			ImVec2 viewportMin = {windowPos.x + contentMin.x, windowPos.y + contentMin.y};
-			ImVec2 relativeMousePos = {absoluteMousePos.x - viewportMin.x, absoluteMousePos.y - viewportMin.y};
+			float2 relativeMousePos = {absoluteMousePos.x - viewportMin.x, absoluteMousePos.y - viewportMin.y};
 			if (m_highlightRenderer.GetState() == SelectionState::IDLE) {
 				// SELECTING NEW POINTS
-				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
 					if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
 						m_highlightRenderer.ExtendSelection(context);
 					} else {
@@ -146,28 +147,29 @@ public:
 					m_highlightRenderer.UpdateCandidates(
 						relativeMousePos, viewmat, extent, 
 						renderContext.scene.vertices_cpu);
-				}
-				// ADJUSTING SELECTION
-				float mouseWheel = ImGui::GetIO().MouseWheel;
-				if (mouseWheel > 0) {
-					m_highlightRenderer.CycleSelection(1);
-				} else if (mouseWheel < 0) {
-					m_highlightRenderer.CycleSelection(-1);
-				}
-
-				// MOVING POINTS
-				if (ImGui::IsKeyPressed(ImGuiKey_G)) {
-					m_highlightRenderer.BeginGrab(renderContext.scene, viewmat);
+					// m_highlightRenderer.UpdateCandidatesGPU(context, renderContext, relativeMousePos);
+				} else {
+					// ADJUSTING SELECTION
+					float mouseWheel = ImGui::GetIO().MouseWheel;
+					if (mouseWheel > 0) {
+						m_highlightRenderer.CycleSelection(1);
+					} else if (mouseWheel < 0) {
+						m_highlightRenderer.CycleSelection(-1);
+					} else {
+						// MOVING POINTS
+						if (ImGui::IsKeyPressed(ImGuiKey_G)) {
+							m_highlightRenderer.BeginGrab(renderContext.scene, viewmat, relativeMousePos);
+						}
+					}
 				}
 			} else if (m_highlightRenderer.GetState() == SelectionState::GRABBING) {
-				printf("Handling grab\n");
-				m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat);
 
 				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
 					m_highlightRenderer.ConfirmGrab();
-				}
-				if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+				} else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					m_highlightRenderer.CancelGrab(context, renderContext.scene);
+				} else {
+					m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat);
 				}
 			}
 		}

@@ -26,7 +26,7 @@ set_target_properties(DelaunayTetRenderer PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(DelaunayTetRenderer PRIVATE /usr/local/lib)
 target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan glm)
-target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib)
+target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib Eigen3::Eigen)
 
 target_compile_definitions(DelaunayTetRenderer PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
 

@@ -163,6 +163,18 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	}
 
 	CalculateSpheres(context);
+
+
+    adjacency = std::vector<std::set<uint32_t>>(vertices_cpu.size());
+    for (const auto& tet : indices_cpu) {
+        uint32_t v[] = {tet.x, tet.y, tet.z, tet.w};
+        adjacency[v[0]].insert({v[1], v[2], v[3]});
+        adjacency[v[1]].insert({v[0], v[2], v[3]});
+        adjacency[v[2]].insert({v[0], v[1], v[3]});
+        adjacency[v[3]].insert({v[0], v[1], v[2]});
+    }
+
+
 }
 
 ShaderParameter TetrahedronScene::GetShaderParameter() {

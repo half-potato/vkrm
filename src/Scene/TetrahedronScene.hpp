@@ -1,5 +1,6 @@
 #pragma once
 
+#include <set>
 #include <stack>
 #include <vector>
 #include <filesystem>
@@ -30,10 +31,10 @@ public:
     // These are the master copies of the scene data. All modifications and
     // application logic (like selection) should operate on these vectors.
     std::vector<float3>                vertices_cpu;
+    std::vector<uint4>                 indices_cpu;
     std::vector<float>                 densities_cpu;
     std::vector<float3>                gradients_cpu;
-    std::vector<uint4>                 indices_cpu;
-
+	std::vector<std::set<uint32_t>>	   adjacency;
 
 public:
     // --- PUBLIC STATE & ACCESSORS ---
