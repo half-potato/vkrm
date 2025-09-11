@@ -18,6 +18,21 @@ set_source_files_properties(
     "-DDEFAULT_SHADER_INCLUDE_PATHS=\\\"${SHADER_INCLUDE_DIR}\\\"," )
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
+# --- Geogram Configuration ---
+# Set geogram options before adding the subdirectory to prevent it from building
+# unnecessary components like applications, tests, or documentation.
+set(GEOGRAM_WITH_APPLICATIONS OFF CACHE BOOL "Build Geogram applications" FORCE)
+set(GEOGRAM_WITH_LUA OFF CACHE BOOL "Build Geogram with Lua" FORCE)
+set(GEOGRAM_WITH_PYTHON OFF CACHE BOOL "Build Geogram with Python" FORCE)
+set(GEOGRAM_WITH_DOC OFF CACHE BOOL "Build Geogram documentation" FORCE)
+set(GEOGRAM_WITH_TESTS OFF CACHE BOOL "Build Geogram tests" FORCE)
+set(GEOGRAM_LIB_ONLY ON CACHE BOOL "Build only the geogram libraries" FORCE)
+
+# Add the geogram subdirectory
+# Make sure you have cloned geogram into the 'extern' folder first.
+add_subdirectory(extern/geogram)
+# --- End Geogram Configuration ---
+
 add_executable(DelaunayTetRenderer
     src/App.cpp
     src/Scene/TetrahedronScene.cpp
@@ -26,7 +41,7 @@ set_target_properties(DelaunayTetRenderer PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(DelaunayTetRenderer PRIVATE /usr/local/lib)
 target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan glm)
-target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib Eigen3::Eigen)
+target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib Eigen3::Eigen geogram)
 
 target_compile_definitions(DelaunayTetRenderer PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
 
@@ -38,6 +53,6 @@ set_target_properties(benchmark PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_directories(benchmark PRIVATE /usr/local/lib)
 target_link_libraries(benchmark PUBLIC Vulkan::Vulkan glm)
-target_link_libraries(benchmark PRIVATE RoseLib Eigen3::Eigen)
+target_link_libraries(benchmark PRIVATE RoseLib Eigen3::Eigen geogram)
 
 target_compile_definitions(benchmark PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
