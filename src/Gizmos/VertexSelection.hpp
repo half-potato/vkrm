@@ -204,7 +204,8 @@ public:
 		TetrahedronScene& scene,
 		const float2& currentMousePos,
 		const uint2& viewportSize,
-		const glm::mat4& viewProj)
+		const glm::mat4& viewProj,
+		const float dt)
 	{
 		// 1. Calculate the inverse matrix for unprojection
 		const glm::mat4 invViewProj = glm::inverse(viewProj);
@@ -227,7 +228,7 @@ public:
 		// 8. Send the updates to the scene
 		// scene.UpdateVertices(context, updates);
 		// auto fullUpdates = updateLa(deform_context, updates);
-		auto fullUpdates = updatePBD(pbd_context, updates);
+		auto fullUpdates = updatePBD(scene, pbd_context, dt, updates);
 		scene.UpdateVertices(context, fullUpdates);
 	}
 

@@ -174,6 +174,14 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
         adjacency[v[3]].insert({v[0], v[1], v[2]});
     }
 
+	vertex_to_tets = std::vector<std::vector<uint32_t>> (vertices_cpu.size());
+	for (uint32_t tet_idx = 0; tet_idx < indices_cpu.size(); ++tet_idx) {
+		const auto& tet = indices_cpu[tet_idx];
+		vertex_to_tets[tet.x].push_back(tet_idx);
+		vertex_to_tets[tet.y].push_back(tet_idx);
+		vertex_to_tets[tet.z].push_back(tet_idx);
+		vertex_to_tets[tet.w].push_back(tet_idx);
+	}
 
 }
 

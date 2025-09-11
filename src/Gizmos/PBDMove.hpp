@@ -23,6 +23,7 @@ struct Particle {
 struct DistanceConstraint {
     uint32_t p1_local_idx, p2_local_idx;
     float rest_length;
+    float alpha;
 };
 
 // A volume constraint for a tetrahedron
@@ -40,12 +41,18 @@ struct PBDContext {
 
     // PBD solver parameters
     float dt = 0.016f; // Timestep, e.g., for ~60fps
-    int solver_iterations = 2;
+    int solver_iterations = 8;
 };
 
 // Helper to calculate signed volume of a tetrahedron
 float signedVolumeOfTet(const float3& p1, const float3& p2, const float3& p3, const float3& p4) {
     return dot(cross(p2 - p1, p3 - p1), p4 - p1) / 6.0f;
+}
+
+float stiffness_kernel(float x) {
+    float fx = -(x-0.5) * (x-0.5) + 0.25;
+    return max(1e-5f*fx, 1e-10f);
+    // return max(1e-5f*(1.f-x), 1e-10f);
 }
 
 void initPBD(
@@ -174,48 +181,77 @@ void initPBD(
         context.particles.push_back(p);
     }
 
-    // --- 3. Create Constraints ONLY for the Simulation Island ---
+    // --- 3. Create Constraints ONLY for the Simulation Island (EFFICIENTLY) ---
     context.distance_constraints.clear();
     context.volume_constraints.clear();
     std::set<std::pair<uint32_t, uint32_t>> existing_edges;
+    std::set<uint32_t> processed_tets; // Keep track of tets we've already handled
 
-    // Iterate through all tets in the original scene...
-    for (const auto& tet : scene.indices_cpu) {
-        uint32_t global_indices[] = {tet.x, tet.y, tet.z, tet.w};
 
-        // ...but only create constraints if ALL vertices of the tet are in our simulation island.
-        bool all_vertices_in_context = 
-            context.global_to_local_idx_map.count(global_indices[0]) &&
-            context.global_to_local_idx_map.count(global_indices[1]) &&
-            context.global_to_local_idx_map.count(global_indices[2]) &&
-            context.global_to_local_idx_map.count(global_indices[3]);
+    for (uint32_t global_idx : simulation_vertices) {
+        // For each vertex in our island, check its incident tetrahedra
+        if (scene.vertex_to_tets.size() <= global_idx) continue; // Safety check
 
-        if (all_vertices_in_context) {
-            // Add Volume Constraint
-            VolumeConstraint vc;
-            vc.p1_local_idx = context.global_to_local_idx_map.at(global_indices[0]);
-            vc.p2_local_idx = context.global_to_local_idx_map.at(global_indices[1]);
-            vc.p3_local_idx = context.global_to_local_idx_map.at(global_indices[2]);
-            vc.p4_local_idx = context.global_to_local_idx_map.at(global_indices[3]);
-            vc.rest_volume = signedVolumeOfTet(scene.vertices_cpu[tet.x], scene.vertices_cpu[tet.y], scene.vertices_cpu[tet.z], scene.vertices_cpu[tet.w]);
-            context.volume_constraints.push_back(vc);
+        for (uint32_t tet_idx : scene.vertex_to_tets[global_idx]) {
+            // If we already processed this tet, skip it
+            if (processed_tets.count(tet_idx)) continue;
 
-            // Add 6 Distance Constraints for the tetrahedron's edges
-            for (int i = 0; i < 4; ++i) {
-                for (int j = i + 1; j < 4; ++j) {
-                    uint32_t u = global_indices[i];
-                    uint32_t v = global_indices[j];
-                    if (u > v) std::swap(u, v);
-                    
-                    if (existing_edges.find({u, v}) == existing_edges.end()) {
-                        DistanceConstraint dc;
-                        dc.p1_local_idx = context.global_to_local_idx_map.at(u);
-                        dc.p2_local_idx = context.global_to_local_idx_map.at(v);
-                        dc.rest_length = length(scene.vertices_cpu[u] - scene.vertices_cpu[v]);
-                        context.distance_constraints.push_back(dc);
-                        existing_edges.insert({u, v});
+            const auto& tet = scene.indices_cpu[tet_idx];
+            uint32_t global_indices[] = {tet.x, tet.y, tet.z, tet.w};
+
+            // Check if ALL vertices of the tet are in our simulation island.
+            bool all_vertices_in_context = 
+                context.global_to_local_idx_map.count(global_indices[0]) &&
+                context.global_to_local_idx_map.count(global_indices[1]) &&
+                context.global_to_local_idx_map.count(global_indices[2]) &&
+                context.global_to_local_idx_map.count(global_indices[3]);
+            
+            if (all_vertices_in_context) {
+                // Add Volume Constraint
+                VolumeConstraint vc;
+                vc.p1_local_idx = context.global_to_local_idx_map.at(global_indices[0]);
+                vc.p1_local_idx = context.global_to_local_idx_map.at(global_indices[0]);
+                vc.p2_local_idx = context.global_to_local_idx_map.at(global_indices[1]);
+                vc.p3_local_idx = context.global_to_local_idx_map.at(global_indices[2]);
+                vc.p4_local_idx = context.global_to_local_idx_map.at(global_indices[3]);
+                vc.rest_volume = signedVolumeOfTet(
+                    scene.vertices_cpu[tet.x], 
+                    scene.vertices_cpu[tet.y], 
+                    scene.vertices_cpu[tet.z], 
+                    scene.vertices_cpu[tet.w]
+                );
+                context.volume_constraints.push_back(vc);
+
+                // Add 6 Distance Constraints for the tetrahedron's edges
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = i + 1; j < 4; ++j) {
+                        uint32_t u = global_indices[i];
+                        uint32_t v = global_indices[j];
+                        if (u > v) std::swap(u, v);
+                        
+                        if (existing_edges.find({u, v}) == existing_edges.end()) {
+                            DistanceConstraint dc;
+                            dc.p1_local_idx = context.global_to_local_idx_map.at(u);
+                            dc.p2_local_idx = context.global_to_local_idx_map.at(v);
+                            dc.rest_length = length(scene.vertices_cpu[u] - scene.vertices_cpu[v]);
+                            float k_x = 9999;
+                            for (const auto& handle_idx : user_handles) {
+                                const auto& handle = scene.vertices_cpu[handle_idx];
+                                float k_x_i = 0.5*(
+                                    length(scene.vertices_cpu[u] - handle) +
+                                    length(scene.vertices_cpu[v] - handle));
+                                k_x = min(k_x, k_x_i);
+                            }
+                            dc.alpha = stiffness_kernel(k_x / radius);
+                            context.distance_constraints.push_back(dc);
+                            existing_edges.insert({u, v});
+                        }
                     }
                 }
+
+
+                // Mark this tet as processed
+                processed_tets.insert(tet_idx);
             }
         }
     }
@@ -223,47 +259,86 @@ void initPBD(
 
 // --- Constraint Solver Helpers ---
 
-void solveDistanceConstraint(Particle& p1, Particle& p2, float rest_length) {
+// void solveDistanceConstraint(Particle& p1, Particle& p2, float rest_length) {
+//     float3 delta = p2.predicted_position - p1.predicted_position;
+//     float current_length = length(delta);
+//     if (current_length < 1e-6f) return;
+//
+//     float error = current_length - rest_length;
+//     float3 correction_vector = (delta / current_length) * error;
+//
+//     float total_inv_mass = p1.inverse_mass + p2.inverse_mass;
+//     if (total_inv_mass < 1e-6f) return;
+//
+//     p1.predicted_position += correction_vector * (p1.inverse_mass / total_inv_mass);
+//     p2.predicted_position -= correction_vector * (p2.inverse_mass / total_inv_mass);
+// }
+void solveDistanceConstraint(Particle& p1, Particle& p2, float rest_length, float alpha, float dt) {
     float3 delta = p2.predicted_position - p1.predicted_position;
     float current_length = length(delta);
     if (current_length < 1e-6f) return;
 
-    float error = current_length - rest_length;
-    float3 correction_vector = (delta / current_length) * error;
-
     float total_inv_mass = p1.inverse_mass + p2.inverse_mass;
     if (total_inv_mass < 1e-6f) return;
 
-    p1.predicted_position += correction_vector * (p1.inverse_mass / total_inv_mass);
-    p2.predicted_position -= correction_vector * (p2.inverse_mass / total_inv_mass);
+    // --- XPBD Calculation ---
+    // alpha_tilde is the compliance scaled by the timestep
+    float alpha_tilde = alpha / (dt * dt);
+
+    // Calculate the correction lambda
+    float error = current_length - rest_length;
+    float lambda = -error / (total_inv_mass + alpha_tilde);
+
+    // Calculate the correction vector
+    float3 correction_vector = (delta / current_length) * lambda;
+
+    // Apply the correction
+    p1.predicted_position -= correction_vector * p1.inverse_mass;
+    p2.predicted_position += correction_vector * p2.inverse_mass;
 }
 
-void solveVolumeConstraint(Particle& p1, Particle& p2, Particle& p3, Particle& p4, float rest_volume) {
+void solveVolumeConstraint(Particle& p1, Particle& p2, Particle& p3, Particle& p4, float rest_volume, float dt) {
     float current_volume = signedVolumeOfTet(p1.predicted_position, p2.predicted_position, p3.predicted_position, p4.predicted_position);
     float error = current_volume - rest_volume;
     
-    // Gradients of the volume constraint
-    float3 grad1 = cross(p2.predicted_position - p3.predicted_position, p4.predicted_position - p2.predicted_position) / 6.0f;
-    float3 grad2 = cross(p3.predicted_position - p1.predicted_position, p4.predicted_position - p1.predicted_position) / 6.0f;
-    float3 grad3 = cross(p1.predicted_position - p2.predicted_position, p4.predicted_position - p1.predicted_position) / 6.0f;
-    float3 grad4 = cross(p2.predicted_position - p1.predicted_position, p3.predicted_position - p1.predicted_position) / 6.0f;
+    // --- EDITED: Consistent Gradient Calculation ---
+    // These are derived directly from the definition of the volume of a tetrahedron
+    // V = 1/6 * dot(cross(p2 - p1, p3 - p1), p4 - p1)
     
-    float sum_grad_sq = dot(grad1, grad1) + dot(grad2, grad2) + dot(grad3, grad3) + dot(grad4, grad4);
+    const float3& pos1 = p1.predicted_position;
+    const float3& pos2 = p2.predicted_position;
+    const float3& pos3 = p3.predicted_position;
+    const float3& pos4 = p4.predicted_position;
+
+    float3 grad1 = cross(pos2 - pos3, pos4 - pos3) / 6.0f; // Note: This is cross(p2-p3, p4-p3), not p4-p2
+    float3 grad2 = cross(pos3 - pos1, pos4 - pos1) / 6.0f;
+    float3 grad3 = cross(pos4 - pos1, pos2 - pos1) / 6.0f;
+    float3 grad4 = cross(pos2 - pos1, pos3 - pos1) / 6.0f;
+    // --- END EDIT ---
+
+    float sum_grad_sq = dot(grad1, grad1) * p1.inverse_mass + 
+                        dot(grad2, grad2) * p2.inverse_mass + 
+                        dot(grad3, grad3) * p3.inverse_mass + 
+                        dot(grad4, grad4) * p4.inverse_mass;
+
     if (sum_grad_sq < 1e-9f) return;
 
+    // Use the mass-weighted sum in the denominator for a more stable solve
     float lambda = -error / sum_grad_sq;
 
+    // Apply corrections scaled by inverse mass
     p1.predicted_position += grad1 * lambda * p1.inverse_mass;
     p2.predicted_position += grad2 * lambda * p2.inverse_mass;
     p3.predicted_position += grad3 * lambda * p3.inverse_mass;
     p4.predicted_position += grad4 * lambda * p4.inverse_mass;
 }
 
-
 // --- Main Update Function ---
 // NOTE: The context MUST be mutable, so we pass it as 'PBDContext&'
 std::vector<std::pair<uint32_t, float3>> updatePBD(
+    vkDelTet::TetrahedronScene& scene,
     PBDContext& context,
+    const float dt,
     const std::vector<std::pair<uint32_t, float3>>& current_user_handles)
 {
     // 1. Update handle positions directly
@@ -289,12 +364,16 @@ std::vector<std::pair<uint32_t, float3>> updatePBD(
     // 3. Main solver loop: iteratively project constraints
     for (int i = 0; i < context.solver_iterations; ++i) {
         for (const auto& c : context.distance_constraints) {
-            solveDistanceConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], c.rest_length);
+            solveDistanceConstraint(
+                context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], c.rest_length, c.alpha,
+                dt);
         }
-        for (const auto& c : context.volume_constraints) {
-            solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
-                                  context.particles[c.p3_local_idx], context.particles[c.p4_local_idx], c.rest_volume);
-        }
+        // for (const auto& c : context.volume_constraints) {
+        //     solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
+        //                           context.particles[c.p3_local_idx], context.particles[c.p4_local_idx],
+        //                           c.rest_volume,
+        //                           dt);
+        // }
     }
 
     // 4. Update final positions and velocities

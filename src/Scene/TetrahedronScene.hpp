@@ -35,6 +35,7 @@ public:
     std::vector<float>                 densities_cpu;
     std::vector<float3>                gradients_cpu;
 	std::vector<std::set<uint32_t>>	   adjacency;
+	std::vector<std::vector<uint32_t>> vertex_to_tets;
 
 public:
     // --- PUBLIC STATE & ACCESSORS ---

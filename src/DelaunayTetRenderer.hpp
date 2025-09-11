@@ -169,7 +169,7 @@ public:
 				} else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsKeyPressed(ImGuiKey_Escape)) {
 					m_highlightRenderer.CancelGrab(context, renderContext.scene);
 				} else {
-					m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat);
+					m_highlightRenderer.UpdateGrab(context, renderContext.scene, relativeMousePos, extent, viewmat, dt);
 				}
 			}
 		}
