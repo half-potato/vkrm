@@ -219,7 +219,6 @@ int main(int argc, const char** argv) {
                     double elapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(now - startTime).count();
                     float fps = static_cast<float>(frameCount) / elapsedTime;
                     std::cout << "Average FPS: " << fps << std::endl;
-                    Gui::Destroy();
                     exit(0);
                 }
             }

@@ -41,7 +41,7 @@ struct PBDContext {
 
     // PBD solver parameters
     float dt = 0.016f; // Timestep, e.g., for ~60fps
-    int solver_iterations = 8;
+    int solver_iterations = 4;
 };
 
 // Helper to calculate signed volume of a tetrahedron
@@ -368,12 +368,12 @@ std::vector<std::pair<uint32_t, float3>> updatePBD(
                 context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], c.rest_length, c.alpha,
                 dt);
         }
-        // for (const auto& c : context.volume_constraints) {
-        //     solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
-        //                           context.particles[c.p3_local_idx], context.particles[c.p4_local_idx],
-        //                           c.rest_volume,
-        //                           dt);
-        // }
+        for (const auto& c : context.volume_constraints) {
+            solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
+                                  context.particles[c.p3_local_idx], context.particles[c.p4_local_idx],
+                                  c.rest_volume,
+                                  dt);
+        }
     }
 
     // 4. Update final positions and velocities

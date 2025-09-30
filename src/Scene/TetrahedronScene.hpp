@@ -9,6 +9,9 @@
 #include <Rose/Core/CommandContext.hpp>
 #include <Rose/Core/PipelineCache.hpp>
 #include <Rose/Scene/Mesh.hpp>
+#include <geogram/delaunay/delaunay_3d.h>
+#include <geogram/delaunay/delaunay.h>
+#include <geogram/basic/logger.h>
 
 namespace vkDelTet {
 
@@ -23,6 +26,7 @@ struct TetrahedronAttributes {
     float3 centroid;
     float  offset;
     std::vector<float3> sh_coeffs; // Holds all SH coefficients for this tet
+
 };
 
 class TetrahedronScene {
@@ -32,10 +36,14 @@ public:
     // application logic (like selection) should operate on these vectors.
     std::vector<float3>                vertices_cpu;
     std::vector<uint4>                 indices_cpu;
+    std::vector<uint4>                 full_indices_cpu;
+	std::vector<uint8_t>				   mask_cpu;
     std::vector<float>                 densities_cpu;
     std::vector<float3>                gradients_cpu;
 	std::vector<std::set<uint32_t>>	   adjacency;
 	std::vector<std::vector<uint32_t>> vertex_to_tets;
+
+	GEO::Delaunay_var triangulation;
 
 public:
     // --- PUBLIC STATE & ACCESSORS ---

@@ -79,6 +79,7 @@ public:
         Pipeline& pipeline = GetPipeline(context, renderContext);
         auto descriptorSets = context.GetDescriptorSets(*pipeline.Layout());
 
+        uint32_t tetCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
         // prepare draw parameters
         {
             ShaderParameter params = {};
@@ -88,6 +89,7 @@ public:
             params["tetColors"]        = (BufferParameter)renderContext.evaluatedColors;
             params["viewProjection"] = viewProjection;
             params["rayOrigin"] = rayOrigin;
+            params["tetCount"] = (uint)tetCount;
             params["densityThreshold"] = densityThreshold * renderContext.scene.DensityScale();
             for (uint32_t i = 0; i < renderContext.scene.TetSH().size(); i++)
                     params["shCoeffs"][i] = (BufferParameter)renderContext.scene.TetSH()[i];
@@ -103,7 +105,6 @@ public:
         context->setViewport(0, vk::Viewport{ 0, 0, (float)extent.x, (float)extent.y, 0, 1});
         context->setScissor(0,  vk::Rect2D{ {0, 0}, { extent.x, extent.y }});
 
-        uint32_t tetCount = (uint32_t)(percentTets*renderContext.scene.TetCount());
         if (tetCount > 0) {
             context->bindPipeline(vk::PipelineBindPoint::eGraphics, **pipeline);
             context.BindDescriptors(*pipeline.Layout(), *descriptorSets);

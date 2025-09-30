@@ -60,13 +60,14 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		sh_props[bufId].emplace_back(prefix + "_g");
 		sh_props[bufId].emplace_back(prefix + "_b");
 	}
-	
+
 	auto getPlyData = []<typename T>(const auto& ply_data) -> std::span<T>{
 		return std::span{reinterpret_cast<T*>(ply_data->buffer.get()), ply_data->buffer.size_bytes()/sizeof(T)};
 	};
 
 	auto ply_vertices      = ply.request_properties_from_element("vertex", { "x", "y", "z" });
-	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
+	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "full_indices" }, 4);
+	auto ply_tet_mask   = ply.request_properties_from_element("tetrahedron", { "mask" });
 	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "s" });
 	auto ply_tet_gradients = ply.request_properties_from_element("tetrahedron", { "grd_x", "grd_y", "grd_z" });
 	std::vector<std::shared_ptr<tinyply::PlyData>> ply_vertex_sh(sh_props.size());
@@ -78,9 +79,10 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	std::span pos  = getPlyData.template operator()<float3>(ply_vertices);
 	std::span inds = getPlyData.template operator()<uint4>(ply_tet_indices);
 	std::span dens = getPlyData.template operator()<float>(ply_tet_densities);
+	std::span mask = getPlyData.template operator()<uint8_t>(ply_tet_mask);
 	std::span grad = getPlyData.template operator()<float3>(ply_tet_gradients);
 
-	const uint32_t numTets = (uint32_t)inds.size();
+	const uint32_t numTets = dens.size();
 
 	numTetSHCoeffs = 0;
 	std::vector<std::span<float3>> sh(ply_vertex_sh.size());
@@ -97,31 +99,43 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	}
 	maxDensity = 0;
 	for (const float d : dens)
-		maxDensity = max(maxDensity, d);
+	maxDensity = max(maxDensity, d);
 
 	context.GetDevice().Wait(); // wait in case previous vertices/colors/indices are in use still
 
 	bool compressDensities = false;
 	bool compressSH = true;
-    vertices_cpu = std::vector<float3> (pos.begin(), pos.end());
-    densities_cpu = std::vector<float> (dens.begin(), dens.end());
-    gradients_cpu = std::vector<float3> (grad.begin(), grad.end());
-    indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
-	
+	vertices_cpu = std::vector<float3> (pos.begin(), pos.end());
+	densities_cpu = std::vector<float> (dens.begin(), dens.end());
+	gradients_cpu = std::vector<float3> (grad.begin(), grad.end());
+	mask_cpu = std::vector<uint8_t> (mask.begin(), mask.end());
+	full_indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
+	indices_cpu = std::vector<uint4>(numTets);
+
+	printf("Masking\n");
+	size_t n = 0;
+	for (size_t i=0; i<full_indices_cpu.size(); i++) {
+		if (mask_cpu[i] != 0) {
+			indices_cpu[n] = full_indices_cpu[i];
+			n++;
+		}
+	}
+	printf("Done\n");
+
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
-	tetIndices       = context.UploadData(inds, vk::BufferUsageFlagBits::eStorageBuffer);
+	tetIndices       = context.UploadData(indices_cpu, vk::BufferUsageFlagBits::eStorageBuffer);
 	tetGradients     = context.UploadData(grad, vk::BufferUsageFlagBits::eStorageBuffer);
 	tetOffsets     = Buffer::Create(context.GetDevice(), numTets*sizeof(float), vk::BufferUsageFlagBits::eStorageBuffer);
 	tetCentroids     = Buffer::Create(context.GetDevice(), numTets*sizeof(float3), vk::BufferUsageFlagBits::eStorageBuffer);
 	tetCircumspheres = Buffer::Create(context.GetDevice(), numTets*sizeof(float4), vk::BufferUsageFlagBits::eStorageBuffer);
-	
+
 	{
 		Pipeline& f32tof16pipeline = *compressColorsPipeline.get(context.GetDevice(), {
 			{ "INPUT_TYPE",  "float" },
 			{ "OUTPUT_TYPE", "uint16_t" },
 			{ "COMPRESS_FN", "(uint16_t)f32tof16(i)" },
 		});
-		
+
 		if (compressDensities)
 		{
 			tetDensities = TexelBufferView::Create(context.GetDevice(), Buffer::Create(context.GetDevice(), numTets*sizeof(uint16_t), vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR16Sfloat);
@@ -134,7 +148,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 			context.Dispatch(f32tof16pipeline, numTets, parameters);
 		}
 		else
-		{
+	{
 			tetDensities = TexelBufferView::Create(context.GetDevice(), context.UploadData(dens, vk::BufferUsageFlagBits::eUniformTexelBuffer|vk::BufferUsageFlagBits::eStorageBuffer), vk::Format::eR32Sfloat);
 		}
 
@@ -156,7 +170,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 				context.Dispatch(f32tof16pipeline, n, parameters);
 			}
 			else
-			{
+		{
 				tetSH[i] = context.UploadData(sh[i], vk::BufferUsageFlagBits::eStorageBuffer);
 			}
 		}
@@ -165,14 +179,14 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	CalculateSpheres(context);
 
 
-    adjacency = std::vector<std::set<uint32_t>>(vertices_cpu.size());
-    for (const auto& tet : indices_cpu) {
-        uint32_t v[] = {tet.x, tet.y, tet.z, tet.w};
-        adjacency[v[0]].insert({v[1], v[2], v[3]});
-        adjacency[v[1]].insert({v[0], v[2], v[3]});
-        adjacency[v[2]].insert({v[0], v[1], v[3]});
-        adjacency[v[3]].insert({v[0], v[1], v[2]});
-    }
+	adjacency = std::vector<std::set<uint32_t>>(vertices_cpu.size());
+	for (const auto& tet : indices_cpu) {
+		uint32_t v[] = {tet.x, tet.y, tet.z, tet.w};
+		adjacency[v[0]].insert({v[1], v[2], v[3]});
+		adjacency[v[1]].insert({v[0], v[2], v[3]});
+		adjacency[v[2]].insert({v[0], v[1], v[3]});
+		adjacency[v[3]].insert({v[0], v[1], v[2]});
+	}
 
 	vertex_to_tets = std::vector<std::vector<uint32_t>> (vertices_cpu.size());
 	for (uint32_t tet_idx = 0; tet_idx < indices_cpu.size(); ++tet_idx) {
@@ -182,6 +196,31 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		vertex_to_tets[tet.z].push_back(tet_idx);
 		vertex_to_tets[tet.w].push_back(tet_idx);
 	}
+
+
+	size_t nb_verts = size_t(vertices_cpu.size());
+	std::vector<double> vertices_double(nb_verts * 3);
+	for(size_t i = 0; i < nb_verts; ++i) {
+		vertices_double[i * 3 + 0] = double(vertices_cpu[i].x);
+		vertices_double[i * 3 + 1] = double(vertices_cpu[i].y);
+		vertices_double[i * 3 + 2] = double(vertices_cpu[i].z);
+	}
+
+	size_t nb_inds = size_t(full_indices_cpu.size());
+	std::vector<size_t> indices_flat(nb_inds * 4);
+	for(size_t i = 0; i < nb_inds; ++i) {
+		indices_flat[i * 4 + 0] = size_t(full_indices_cpu[i].x);
+		indices_flat[i * 4 + 1] = size_t(full_indices_cpu[i].y);
+		indices_flat[i * 4 + 2] = size_t(full_indices_cpu[i].z);
+		indices_flat[i * 4 + 3] = size_t(full_indices_cpu[i].w);
+	}
+	GEO::initialize(GEO::GEOGRAM_INSTALL_ALL);
+	triangulation = GEO::Delaunay::create(GEO::coord_index_t(3), "BDEL");
+	GEO::Delaunay* base_ptr = triangulation.get();
+
+	// 2. Use dynamic_cast to safely cast it to the derived pointer.
+	auto* delaunay3d_ptr = dynamic_cast<GEO::Delaunay3d*>(base_ptr);
+	delaunay3d_ptr->set_mesh(vertices_double, indices_flat);
 
 }
 

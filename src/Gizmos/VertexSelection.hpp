@@ -191,7 +191,7 @@ public:
 			m_initialVertexPositions[id] = pos;
 			m_grabAnchorPoint3D += pos;
 		}
-		float radius = 0.25;
+		float radius = 0.5;
 		// initLa(deform_context, radius, scene, selected);
 		initPBD(pbd_context, radius, scene, selected);
 
@@ -228,7 +228,7 @@ public:
 		// 8. Send the updates to the scene
 		// scene.UpdateVertices(context, updates);
 		// auto fullUpdates = updateLa(deform_context, updates);
-		auto fullUpdates = updatePBD(scene, pbd_context, dt, updates);
+		auto fullUpdates = updatePBD(scene, pbd_context, 0.016, updates);
 		scene.UpdateVertices(context, fullUpdates);
 	}
 
