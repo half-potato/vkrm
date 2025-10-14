@@ -46,7 +46,9 @@ int main(int argc, const char** argv) {
         ("n,no_pca", "Disable pca for camera positions(true/false)", cxxopts::value<bool>()->default_value("false"))
         ("a,auto", "Auto startup and shutdown", cxxopts::value<bool>()->default_value("false"))
         ("l,llff_hold", "Take every Nth image for benchmark", cxxopts::value<int>()->default_value("8"))
-        ("d,downsample", "Downsample factor for image resolution", cxxopts::value<int>()->default_value("4"))
+        ("d,downsample", "Downsample factor for 'test' resolution", cxxopts::value<int>()->default_value("4"))
+        // ++ NEW OPTION: Add a resolution parameter ++
+        ("r,resolution", "Set render resolution (test, 1080p, 2k, 4k)", cxxopts::value<std::string>()->default_value("test"))
         ("h,help", "Print usage");
 
     auto result = options.parse(argc, argv);
@@ -61,7 +63,16 @@ int main(int argc, const char** argv) {
     const bool fovXfovYFlag = result["fov"].as<bool>();
     const int llffHold = result["llff_hold"].as<int>();
     const int downsampleFactor = result["downsample"].as<int>();
+    // ++ NEW: Get the resolution string ++
+    const std::string resolutionStr = result["resolution"].as<std::string>();
     // -------------------------
+
+    // ++ NEW: Define resolution map ++
+    const std::map<std::string, uint2> resolutionMap = {
+        {"1080p", {1920, 1080}},
+        {"2k",    {2560, 1440}},
+        {"4k",    {3840, 2160}}
+    };
 
     WindowedApp app("TetRenderer", {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME,
@@ -69,12 +80,10 @@ int main(int argc, const char** argv) {
     });
     app.swapchain->SetPresentMode(vk::PresentModeKHR::eFifoLatestReady);
 
-    // --- Camera Loading and Filtering ---
+    // --- Camera Loading and Filtering (NO CHANGES HERE) ---
     auto allCamerasMap = loadColmapBin(colmapSparsePath, 0.2f, fovXfovYFlag);
-    // Priority: 1. Use transform_file, 2. Honor no_pca, 3. Default to PCA
     if (result.count("transform_file"))
     {
-        // 1. If a transform file is provided, load and apply it.
         const std::string transformPath = result["transform_file"].as<std::string>();
         std::cout << "Loading transformation from file: " << transformPath << std::endl;
         Eigen::Matrix4f transform = loadMatrixFromFile(transformPath);
@@ -82,25 +91,21 @@ int main(int argc, const char** argv) {
     }
     else if (result["no_pca"].as<bool>())
     {
-        // 2. If no_pca is true, do nothing.
         std::cout << "Skipping PCA transformation." << std::endl;
     }
     else
     {
-        // 3. Otherwise, default to calculating and applying PCA.
         std::cout << "Calculating PCA transformation." << std::endl;
         Eigen::Matrix4f transform = PosesPCA(allCamerasMap);
         TransformCameras(allCamerasMap, transform);
     }
 
-    // Convert map to a vector to have a stable, indexable order.
     std::vector<ColmapCamera> allCamerasVec;
     allCamerasVec.reserve(allCamerasMap.size());
     for (auto const& [key, val] : allCamerasMap) {
         allCamerasVec.push_back(val);
     }
 
-    // Apply the llff_hold filter to get the final list of cameras for the benchmark.
     std::vector<ColmapCamera> benchmarkCameras;
     if (llffHold > 0) {
         for (int i = 0; i < allCamerasVec.size(); ++i) {
@@ -109,20 +114,16 @@ int main(int argc, const char** argv) {
             }
         }
     } else {
-        benchmarkCameras = allCamerasVec; // Use all cameras if hold is 0 or less.
+        benchmarkCameras = allCamerasVec;
     }
     std::cout << "Loaded " << allCamerasMap.size() << " cameras, benchmarking with " << benchmarkCameras.size() << " cameras." << std::endl;
     // ------------------------------------
 
     DelaunayTetRenderer renderer;
 
+    // ... (No changes to openSceneDialog, app setup, etc.) ...
     auto openSceneDialog = [&]() {
-        auto f = pfd::open_file(
-            "Choose scene",
-            "",
-            { "PLY files (.ply)", "*.ply" },
-            false
-        );
+        auto f = pfd::open_file("Choose scene", "", { "PLY files (.ply)", "*.ply" }, false);
         for (const std::string& filepath : f.result()) {
             renderer.LoadScene(*app.contexts[app.swapchain->ImageIndex()], filepath);
         }
@@ -130,38 +131,28 @@ int main(int argc, const char** argv) {
 
     app.contexts[0]->Begin();
     renderer.LoadScene(*app.contexts[0], scenePath);
-
     renderer.renderContext.scene.sceneTranslation = float3(0);
     renderer.renderContext.scene.sceneRotation = float3(0, 0, 0);
     app.contexts[0]->Submit();
 
-    // --- Benchmark State Variables ---
     bool isBenchmarking = false;
     int currentCameraIndex = 0;
     int frameCount = 0;
-    double benchmarkDuration = 0.5; // Seconds per camera
+    double benchmarkDuration = 0.5;
     std::chrono::steady_clock::time_point startTime;
     std::chrono::steady_clock::time_point intervalTime;
     std::vector<float> fpsResults;
 
-    app.AddMenuItem("File", [&]() {
-        if (ImGui::MenuItem("Open scene")) {
-            openSceneDialog();
-        }
-    });
+    app.AddMenuItem("File", [&]() { if (ImGui::MenuItem("Open scene")) { openSceneDialog(); } });
+    app.AddWidget("Properties", [&]() { renderer.DrawPropertiesGui(*app.contexts[app.swapchain->ImageIndex()]); }, true);
 
-    app.AddWidget("Properties", [&]() {
-        renderer.DrawPropertiesGui(*app.contexts[app.swapchain->ImageIndex()]);
-    }, true);
-
-    // ---------------------------------
     auto& camData = benchmarkCameras[0];
     renderer.renderContext.camera = camData.camera;
 
     app.AddWidget("Viewport", [&]() {
-        bool start = (renderer.frame_count > 500 and result["auto"].as<bool>() and not isBenchmarking);
-        // --- Benchmark Start Trigger ---
+        bool start = (renderer.frame_count > 2000 and result["auto"].as<bool>() and not isBenchmarking);
         start |= (ImGui::IsKeyPressed(ImGuiKey_O) and ImGui::IsKeyDown(ImGuiMod_Ctrl) and !isBenchmarking);
+        
         if (start) {
             printf("Starting benchmark...\n");
             if (!benchmarkCameras.empty()) {
@@ -170,56 +161,61 @@ int main(int argc, const char** argv) {
                 frameCount = 0;
                 fpsResults.clear();
 
-                // Start with the first camera
                 auto& camData = benchmarkCameras[currentCameraIndex];
                 renderer.renderContext.camera = camData.camera;
-                renderer.renderContext.overrideResolution = camData.dimensions / (uint)downsampleFactor;
 
+                // ++ MODIFIED: Set resolution based on the new parameter ++
+                if (resolutionStr == "test") {
+                    // Use original downsampling logic for "test"
+                    renderer.renderContext.overrideResolution = camData.dimensions / (uint)downsampleFactor;
+                } else if (resolutionMap.count(resolutionStr)) {
+                    // Use the map for fixed resolutions
+                    renderer.renderContext.overrideResolution = resolutionMap.at(resolutionStr);
+                } else {
+                    // Handle invalid input
+                    std::cerr << "Error: Invalid resolution specified: " << resolutionStr << std::endl;
+                    exit(EXIT_FAILURE);
+                }
+                
                 startTime = std::chrono::steady_clock::now();
                 intervalTime = std::chrono::steady_clock::now();
-                std::cout << "Starting benchmark for camera " << currentCameraIndex 
-                    << " at " << renderer.renderContext.overrideResolution->x 
-                    << "x" << renderer.renderContext.overrideResolution->y << std::endl;
+                std::cout << "Starting benchmark for camera " << currentCameraIndex
+                          << " at " << renderer.renderContext.overrideResolution->x 
+                          << "x" << renderer.renderContext.overrideResolution->y << std::endl;
             }
         }
 
-        // --- Per-Frame Benchmark Logic ---
         if (isBenchmarking) {
             frameCount++;
             auto now = std::chrono::steady_clock::now();
             double elapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(now - intervalTime).count();
 
             if (elapsedTime >= benchmarkDuration) {
-                // float fps = static_cast<float>(frameCount) / elapsedTime;
-                // fpsResults.push_back(fps);
-                // std::cout << "  -> Result: " << fps << " FPS" << std::endl;
-
-                // Move to the next camera
                 currentCameraIndex++;
                 if (currentCameraIndex < benchmarkCameras.size()) {
-                    auto& camData = benchmarkCameras[currentCameraIndex];
-                    renderer.renderContext.camera = camData.camera;
-                    // Apply downsampling to the next camera's resolution
-                    renderer.renderContext.overrideResolution = camData.dimensions / (uint)downsampleFactor;
+                    auto& nextCamData = benchmarkCameras[currentCameraIndex];
+                    renderer.renderContext.camera = nextCamData.camera;
 
-                    // startTime = std::chrono::steady_clock::now();
+                    // ++ MODIFIED: Update resolution for the next camera if in "test" mode ++
+                    if (resolutionStr == "test") {
+                        renderer.renderContext.overrideResolution = nextCamData.dimensions / (uint)downsampleFactor;
+                    }
+                    // For other modes, resolution stays fixed.
+
                     intervalTime = std::chrono::steady_clock::now();
-                    std::cout << "Starting benchmark for camera " << currentCameraIndex 
-                        << " at " << renderer.renderContext.overrideResolution->x 
-                        << "x" << renderer.renderContext.overrideResolution->y << std::endl;
+                    std::cout << "Switching to camera " << currentCameraIndex 
+                              << " at " << renderer.renderContext.overrideResolution->x
+                              << "x" << renderer.renderContext.overrideResolution->y << std::endl;
                 } else {
                     // Benchmark finished
                     isBenchmarking = false;
-                    renderer.renderContext.overrideResolution.reset(); // Revert to UI-driven resolution
+                    renderer.renderContext.overrideResolution.reset(); // Revert to default
+                    double totalElapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(now - startTime).count();
+                    float avgFps = static_cast<float>(frameCount) / totalElapsedTime;
+                    
                     std::cout << "Benchmark finished!" << std::endl;
-                    // Optional: Print average FPS
-                    float totalFps = 0.0f;
-                    // for(float fps : fpsResults) totalFps += fps;
-                    // std::cout << "Average FPS: " << totalFps / fpsResults.size() << std::endl;
-                    double elapsedTime = std::chrono::duration_cast<std::chrono::duration<double>>(now - startTime).count();
-                    float fps = static_cast<float>(frameCount) / elapsedTime;
-                    std::cout << "Average FPS: " << fps << std::endl;
-                    Gui::Destroy();
+                    // Print in a machine-readable format for easy parsing
+                    std::cout << "Average FPS: " << avgFps << std::endl;
                     exit(0);
                 }
             }
@@ -232,4 +228,3 @@ int main(int argc, const char** argv) {
     app.device->Wait();
     return EXIT_SUCCESS;
 }
-

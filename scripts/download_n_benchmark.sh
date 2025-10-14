@@ -12,63 +12,117 @@ fi
 VERSION=$1
 REMOTE_HOST="dronelab@67.58.52.188"
 REMOTE_PATH="~/delaunay_rasterization/output"
+RESULTS_DIR="results"
 
+# --- Script Setup ---
 # Create results directory if it doesn't exist
-mkdir -p results
+mkdir -p "$RESULTS_DIR"
 
-# Initialize the results file with a header
-echo "Scene,Average FPS" > results/all_fps.csv
+# Define the resolutions to test
+# RESOLUTIONS=("test" "1080p" "2k" "4k")
+RESOLUTIONS=("test")
+CSV_FILE="${RESULTS_DIR}/all_fps_${VERSION}.csv"
 
-## --- Process scenes that use a transform file ---
-for scene in bicycle flowers garden stump treehill; do
-    echo "--- Processing: $scene ---"
+# Initialize the results file with a new header, including resolution
+echo "Scene,Resolution,Average FPS" > "$CSV_FILE"
 
-    # Download assets
-    scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_4_${VERSION}/ckpt.ply" .
-    scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_4_${VERSION}/transform.txt" .
+# --- Scene Definitions ---
+scenes_4=("bicycle" "flowers" "garden" "stump" "treehill")
+scenes_2=("counter" "room" "kitchen" "bonsai")
+scenes_1=("truck" "train" "drjohnson" "playroom")
+scenes_4=("bicycle" "garden")
+scenes_2=("bonsai")
+scenes_1=("truck" "train" "drjohnson" "playroom")
 
-    # Run benchmark and redirect output to a scene-specific log
-    ./build/bin/benchmark \
-        --scene ckpt.ply \
-        --colmap "/data/nerf_datasets/360/${scene}/sparse/0/" \
-        --auto \
-        --transform_file transform.txt > "results/${scene}.txt"
 
-    # Correctly capture FPS from the correct log file
-    fps=$(grep "Average FPS:" "results/${scene}.txt" | awk '{print $NF}')
+# --- Function to run benchmark for a scene ---
+# Reduces code duplication
+run_benchmark() {
+    local scene=$1
+    local downsample_factor=$2
+    local use_transform=$3
+    local log_file="${RESULTS_DIR}/${scene}.txt"
+    local colmap_path="/data/nerf_datasets/360/${scene}/sparse/0/"
+    # Set the colmap path based on the scene name
+    case "$scene" in
+        "truck" | "train")
+            colmap_path="/data/nerf_datasets/tandt/${scene}/sparse/0/"
+            ;;
+        "playroom" | "drjohnson")
+            colmap_path="/data/nerf_datasets/db/${scene}/sparse/0/"
+            ;;
+        *)
+            # Default path for other scenes
+            colmap_path="/data/nerf_datasets/360/${scene}/sparse/0/"
+            ;;
+    esac
 
-    # Append the result to the main CSV file
-    echo "${scene},${fps}" >> results/all_fps.csv
-    echo "Result for ${scene}: ${fps} FPS"
+    echo "--- Processing Scene: $scene ---"
 
-    # Clean up assets for the next loop
+    # Download assets ONCE per scene
+    echo "Downloading assets for $scene..."
+    if [ "$downsample_factor" = 1 ]; then
+        scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_${VERSION}/ckpt.ply" .
+        if [ "$use_transform" = true ]; then
+            scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_${VERSION}/transform.txt" .
+        fi
+    else
+        scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_${downsample_factor}_${VERSION}/ckpt.ply" .
+        if [ "$use_transform" = true ]; then
+            scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_${downsample_factor}_${VERSION}/transform.txt" .
+        fi
+    fi
+
+    # Loop through each resolution
+    for res in "${RESOLUTIONS[@]}"; do
+        echo "--> Running benchmark for ${scene} at ${res}"
+
+        # Build the command
+        cmd="./build/bin/benchmark \
+            --scene ckpt.ply \
+            --colmap \"${colmap_path}\" \
+            --auto \
+            -d ${downsample_factor} \
+            -r ${res}" # Use the new resolution flag
+
+        # Add transform file if needed
+        if [ "$use_transform" = true ]; then
+            cmd+=" --transform_file transform.txt"
+        fi
+
+        # Run benchmark and redirect output to a log file (overwrite for each resolution)
+        # The '|| true' prevents the script from exiting if the benchmark fails
+        eval "$cmd" > "$log_file" || true
+
+        # Capture FPS from the log file
+        fps=$(grep "Average FPS:" "$log_file" | awk '{print $NF}')
+        if [ -z "$fps" ]; then
+            fps="N/A" # Handle cases where FPS is not found
+        fi
+
+        # Append the result to the main CSV file
+        echo "${scene},${res},${fps}" >> "$CSV_FILE"
+        echo "Result for ${scene} at ${res}: ${fps} FPS"
+    done
+
+    # Clean up assets after all resolutions for this scene are done
     rm -f ckpt.ply transform.txt
+    echo "--- Finished: $scene ---"
+    echo "" # Add a blank line for readability
+}
+
+# --- Main Execution ---
+
+for scene in "${scenes_4[@]}"; do
+    run_benchmark "$scene" 4 true
 done
 
-# --- Process scenes that do not use a transform file ---
-for scene in counter room kitchen bonsai; do
-    echo "--- Processing: $scene ---"
-
-    # Download assets
-    scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_2_${VERSION}/ckpt.ply" .
-    scp "${REMOTE_HOST}:${REMOTE_PATH}/${scene}_ifimages_2_${VERSION}/transform.txt" .
-
-    # Run benchmark
-    ./build/bin/benchmark \
-        --scene ckpt.ply \
-        --colmap "/data/nerf_datasets/360/${scene}/sparse/0/" \
-        --auto \
-        --transform_file transform.txt > "results/${scene}.txt"
-
-    # Correctly capture FPS
-    fps=$(grep "Average FPS:" "results/${scene}.txt" | awk '{print $NF}')
-
-    # Append the result
-    echo "${scene},${fps}" >> results/all_fps.csv
-    echo "Result for ${scene}: ${fps} FPS"
-
-    # Clean up
-    rm -f ckpt.ply
+for scene in "${scenes_2[@]}"; do
+    run_benchmark "$scene" 2 true
 done
 
-echo "--- Script finished. All results are in results/all_fps.csv ---"
+# for scene in "${scenes_1[@]}"; do
+#     run_benchmark "$scene" 1 true
+# done
+
+echo "--- Script finished. All results are in ${CSV_FILE} ---"

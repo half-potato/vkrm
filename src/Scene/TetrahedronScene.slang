@@ -161,6 +161,14 @@ bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float3
 }
 
 [Differentiable]
+float4 compute_integral(float3 c0, float3 c1, float d_dt) {
+    float alpha = exp(-d_dt);
+    float X = (-d_dt*alpha + 1 - alpha);
+    float Y = (d_dt-1) + alpha;
+    return float4((X*c0+Y*c1) / d_dt, alpha);
+}
+
+[Differentiable]
 float compute_integral_1D(float c0, float c1, float d_dt) {
     float alpha = exp(-d_dt);
     float X = (-d_dt*alpha + 1 - alpha);

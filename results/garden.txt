@@ -2,23 +2,23 @@ Loading transformation from file: transform.txt
 Loaded 185 cameras, benchmarking with 24 cameras.
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Scene/Compression.cs.slang:main
 
-SH Size1, 150864896
+SH Size1, 118945520
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Scene/GenSpheres.cs.slang:main
 /home/amai/DelTetRenderer/src/Renderers/../Scene/GenSpheres.cs.slang(76): warning 30081: implicit conversion from 'vector<double,4>' to 'vector<float,4>' is not recommended
     float4 sphere = computeCircumsphere(tet[0], tet[1], tet[2], tet[3]);
                                        ^
 Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0x270000000027 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0x260000000026 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
 Objects: 2
-    [0] VkDescriptorPool 0x270000000027
-    [1] VkDescriptorSetLayout 0x2b000000002b
+    [0] VkDescriptorPool 0x260000000026
+    [1] VkDescriptorSetLayout 0x2a000000002a
 
 Compiled /home/amai/DelTetRenderer/src/Renderers/../TetSort.cs.slang:createPairs
 Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0x270000000027 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0x260000000026 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
 Objects: 2
-    [0] VkDescriptorPool 0x270000000027
-    [1] VkDescriptorSetLayout 0x470000000047
+    [0] VkDescriptorPool 0x260000000026
+    [1] VkDescriptorSetLayout 0x430000000043
 
 Validation Error: [ VUID-VkSwapchainCreateInfoKHR-presentMode-parameter ] | MessageID = 0x8d87e4ef
 vkCreateSwapchainKHR(): pCreateInfo->presentMode (VK_PRESENT_MODE_FIFO_LATEST_READY_KHR) requires the extensions VK_KHR_present_mode_fifo_latest_ready or VK_EXT_present_mode_fifo_latest_ready.
@@ -30,22 +30,10 @@ The Vulkan spec states: If the presentModeFifoLatestReady feature is not enabled
 
 Font path"/home/amai/DelTetRenderer/build/bin/DroidSans.ttf"
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Culling.cs.slang:markTets
-Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0x6e000000006e was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
-Objects: 2
-    [0] VkDescriptorPool 0x6e000000006e
-    [1] VkDescriptorSetLayout 0x6b000000006b
-
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Culling.cs.slang:prefix_sum
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Culling.cs.slang:scan_blocks_atomic
 Compiled /home/amai/DelTetRenderer/src/Renderers/../Culling.cs.slang:compact_tets
 Compiled /home/amai/DelTetRenderer/src/Renderers/../TetSort.cs.slang:updatePairs
-Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0x6e000000006e was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
-Objects: 2
-    [0] VkDescriptorPool 0x6e000000006e
-    [1] VkDescriptorSetLayout 0x970000000097
-
 --- Vulkan Device Info ---
 Device:                   NVIDIA GeForce RTX 4090
 API Version:              Vulkan 1.4
@@ -394,128 +382,153 @@ RWStructuredBuffer<uint> b_globalHist   : register(u4); //buffer holding device 
 RWStructuredBuffer<uint> b_passHist     : register(u5); //buffer used to store reduced sums of partition tiles
                                           ^~~~~~~~
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xad00000000ad) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xa300000000a3) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595692d9700
-    [1] VkBuffer 0xad00000000ad
+    [0] VkCommandBuffer 0x55cf95ab0a20
+    [1] VkBuffer 0xa300000000a3
 
 Compiled /home/amai/DelTetRenderer/src/Renderers/MeshShaderRenderer.3d.slang:meshmain
 Compiled /home/amai/DelTetRenderer/src/Renderers/MeshShaderRenderer.3d.slang:fsmain
 Compiled /home/amai/DelTetRenderer/src/Renderers/../InvertAlpha.cs.slang:main
 Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0xd200000000d2 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0xc600000000c6 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
 Objects: 2
-    [0] VkDescriptorPool 0xd200000000d2
-    [1] VkDescriptorSetLayout 0x6b000000006b
+    [0] VkDescriptorPool 0xc600000000c6
+    [1] VkDescriptorSetLayout 0x660000000066
 
 Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
-vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0xd200000000d2 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0xc600000000c6 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
 Objects: 2
-    [0] VkDescriptorPool 0xd200000000d2
-    [1] VkDescriptorSetLayout 0x970000000097
+    [0] VkDescriptorPool 0xc600000000c6
+    [1] VkDescriptorSetLayout 0x8f000000008f
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xee00000000ee) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xe200000000e2) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595c6d9e090
-    [1] VkBuffer 0xee00000000ee
+    [0] VkCommandBuffer 0x55d0098e2f10
+    [1] VkBuffer 0xe200000000e2
 
 Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
-vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x40000000004) is being signaled by VkQueue 0x559552c57880, but it may still be in use by VkSwapchainKHR 0x4d000000004d.
-Here are the most recently acquired image indices: [2], 1.
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x40000000004) is being signaled by VkQueue 0x55cf95cf20f0, but it may still be in use by VkSwapchainKHR 0x490000000049.
+Here are the most recently acquired image indices: [0], 1.
 (brackets mark the last use of VkSemaphore 0x40000000004 in a presentation operation)
-Swapchain image 2 was presented but was not re-acquired, so VkSemaphore 0x40000000004 may still be in use and cannot be safely reused with image index 1.
+Swapchain image 0 was presented but was not re-acquired, so VkSemaphore 0x40000000004 may still be in use and cannot be safely reused with image index 1.
 Vulkan insight: One solution is to assign each image its own semaphore. Here are some common methods to ensure that a semaphore passed to vkQueuePresentKHR is not in use and can be safely reused:
 	a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
 	b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
 The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
 Objects: 2
     [0] VkSemaphore 0x40000000004
-    [1] VkQueue 0x559552c57880
+    [1] VkQueue 0x55cf95cf20f0
+
+Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[1] binding 3 was created with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER but VkDescriptorPool 0xf500000000f5 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+Objects: 2
+    [0] VkDescriptorPool 0xf500000000f5
+    [1] VkDescriptorSetLayout 0x660000000066
+
+Validation Warning: [ WARNING-CoreValidation-AllocateDescriptorSets-WrongType ] | MessageID = 0xf79f6125
+vkAllocateDescriptorSets(): pAllocateInfo->pSetLayouts[0] binding 4 was created with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER but VkDescriptorPool 0xf500000000f5 was not created with any VkDescriptorPoolSize::type with VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER (Some implementations will not VK_ERROR_OUT_OF_POOL_MEMORY as they should with VK_KHR_maintenance1).
+Objects: 2
+    [0] VkDescriptorPool 0xf500000000f5
+    [1] VkDescriptorSetLayout 0x8f000000008f
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xad00000000ad) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0x1110000000111) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595692d9700
-    [1] VkBuffer 0xad00000000ad
+    [0] VkCommandBuffer 0x55d0049d93d0
+    [1] VkBuffer 0x1110000000111
+
+Validation Error: [ VUID-vkQueueSubmit-pSignalSemaphores-00067 ] | MessageID = 0x539277af
+vkQueueSubmit(): pSubmits[0].pSignalSemaphores[0] (VkSemaphore 0x40000000004) is being signaled by VkQueue 0x55cf95cf20f0, but it may still be in use by VkSwapchainKHR 0x490000000049.
+Here are the most recently acquired image indices: 0, [1], 2.
+(brackets mark the last use of VkSemaphore 0x40000000004 in a presentation operation)
+Swapchain image 1 was presented but was not re-acquired, so VkSemaphore 0x40000000004 may still be in use and cannot be safely reused with image index 2.
+Vulkan insight: One solution is to assign each image its own semaphore. Here are some common methods to ensure that a semaphore passed to vkQueuePresentKHR is not in use and can be safely reused:
+	a) Use a separate semaphore per swapchain image. Index these semaphores using the index of the acquired image.
+	b) Consider the VK_KHR_swapchain_maintenance1 extension. It allows using a VkFence with the presentation operation.
+The Vulkan spec states: Each binary semaphore element of the pSignalSemaphores member of any element of pSubmits must be unsignaled when the semaphore signal operation it defines is executed on the device (https://docs.vulkan.org/spec/latest/chapters/cmdbuffers.html#VUID-vkQueueSubmit-pSignalSemaphores-00067)
+Objects: 2
+    [0] VkSemaphore 0x40000000004
+    [1] VkQueue 0x55cf95cf20f0
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xee00000000ee) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xa300000000a3) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595c6d9e090
-    [1] VkBuffer 0xee00000000ee
+    [0] VkCommandBuffer 0x55cf95ab0a20
+    [1] VkBuffer 0xa300000000a3
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xad00000000ad) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xe200000000e2) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595692d9700
-    [1] VkBuffer 0xad00000000ad
+    [0] VkCommandBuffer 0x55d0098e2f10
+    [1] VkBuffer 0xe200000000e2
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xee00000000ee) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0x1110000000111) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595c6d9e090
-    [1] VkBuffer 0xee00000000ee
+    [0] VkCommandBuffer 0x55d0049d93d0
+    [1] VkBuffer 0x1110000000111
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xad00000000ad) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xa300000000a3) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595692d9700
-    [1] VkBuffer 0xad00000000ad
+    [0] VkCommandBuffer 0x55cf95ab0a20
+    [1] VkBuffer 0xa300000000a3
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xee00000000ee) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xe200000000e2) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595c6d9e090
-    [1] VkBuffer 0xee00000000ee
+    [0] VkCommandBuffer 0x55d0098e2f10
+    [1] VkBuffer 0xe200000000e2
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xad00000000ad) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0x1110000000111) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595692d9700
-    [1] VkBuffer 0xad00000000ad
+    [0] VkCommandBuffer 0x55d0049d93d0
+    [1] VkBuffer 0x1110000000111
 
 Validation Error: [ VUID-vkCmdFillBuffer-dstBuffer-00029 ] | MessageID = 0x636be4da
 (Warning - This VUID has now been reported 10 times, which is the duplicated_message_limit value, this will be the last time reporting it).
-vkCmdFillBuffer(): dstBuffer (VkBuffer 0xee00000000ee) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
+vkCmdFillBuffer(): dstBuffer (VkBuffer 0xa300000000a3) was created with VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT but requires VK_BUFFER_USAGE_2_TRANSFER_DST_BIT.
 The Vulkan spec states: dstBuffer must have been created with VK_BUFFER_USAGE_TRANSFER_DST_BIT usage flag (https://docs.vulkan.org/spec/latest/chapters/clears.html#VUID-vkCmdFillBuffer-dstBuffer-00029)
 Objects: 2
-    [0] VkCommandBuffer 0x5595c6d9e090
-    [1] VkBuffer 0xee00000000ee
+    [0] VkCommandBuffer 0x55cf95ab0a20
+    [1] VkBuffer 0xa300000000a3
 
 Starting benchmark...
 Starting benchmark for camera 0 at 1296x840
-Starting benchmark for camera 1 at 1296x840
-Starting benchmark for camera 2 at 1296x840
-Starting benchmark for camera 3 at 1296x840
-Starting benchmark for camera 4 at 1296x840
-Starting benchmark for camera 5 at 1296x840
-Starting benchmark for camera 6 at 1296x840
-Starting benchmark for camera 7 at 1296x840
-Starting benchmark for camera 8 at 1296x840
-Starting benchmark for camera 9 at 1296x840
-Starting benchmark for camera 10 at 1296x840
-Starting benchmark for camera 11 at 1296x840
-Starting benchmark for camera 12 at 1296x840
-Starting benchmark for camera 13 at 1296x840
-Starting benchmark for camera 14 at 1296x840
-Starting benchmark for camera 15 at 1296x840
-Starting benchmark for camera 16 at 1296x840
-Starting benchmark for camera 17 at 1296x840
-Starting benchmark for camera 18 at 1296x840
-Starting benchmark for camera 19 at 1296x840
-Starting benchmark for camera 20 at 1296x840
-Starting benchmark for camera 21 at 1296x840
-Starting benchmark for camera 22 at 1296x840
-Starting benchmark for camera 23 at 1296x840
+Switching to camera 1 at 1296x840
+Switching to camera 2 at 1296x840
+Switching to camera 3 at 1296x840
+Switching to camera 4 at 1296x840
+Switching to camera 5 at 1296x840
+Switching to camera 6 at 1296x840
+Switching to camera 7 at 1296x840
+Switching to camera 8 at 1296x840
+Switching to camera 9 at 1296x840
+Switching to camera 10 at 1296x840
+Switching to camera 11 at 1296x840
+Switching to camera 12 at 1296x840
+Switching to camera 13 at 1296x840
+Switching to camera 14 at 1296x840
+Switching to camera 15 at 1296x840
+Switching to camera 16 at 1296x840
+Switching to camera 17 at 1296x840
+Switching to camera 18 at 1296x840
+Switching to camera 19 at 1296x840
+Switching to camera 20 at 1296x840
+Switching to camera 21 at 1296x840
+Switching to camera 22 at 1296x840
+Switching to camera 23 at 1296x840
 Benchmark finished!
-Average FPS: 206.266
+Average FPS: 305.863

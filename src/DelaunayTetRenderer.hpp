@@ -19,9 +19,9 @@ class DelaunayTetRenderer {
 private:
 	std::tuple<
 		MeshShaderRenderer,
+		InstancedRenderer,
 		BillboardRenderer,
 		RasterRenderer,
-		InstancedRenderer,
 		PointCloudRenderer
 	> renderers;
 	uint32_t rendererIndex = 0;

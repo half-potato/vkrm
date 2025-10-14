@@ -65,7 +65,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	};
 
 	auto ply_vertices      = ply.request_properties_from_element("vertex", { "x", "y", "z" });
-	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "vertex_indices" }, 4);
+	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "indices" }, 4);
 	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "s" });
 	auto ply_tet_gradients = ply.request_properties_from_element("tetrahedron", { "grd_x", "grd_y", "grd_z" });
 	std::vector<std::shared_ptr<tinyply::PlyData>> ply_vertex_sh(sh_props.size());
