@@ -191,7 +191,7 @@ public:
 			m_initialVertexPositions[id] = pos;
 			m_grabAnchorPoint3D += pos;
 		}
-		float radius = 0.5;
+		float radius = 0.25;
 		// initLa(deform_context, radius, scene, selected);
 		initPBD(pbd_context, radius, scene, selected);
 

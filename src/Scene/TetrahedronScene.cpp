@@ -66,8 +66,8 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	};
 
 	auto ply_vertices      = ply.request_properties_from_element("vertex", { "x", "y", "z" });
-	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "full_indices" }, 4);
-	auto ply_tet_mask   = ply.request_properties_from_element("tetrahedron", { "mask" });
+	auto ply_tet_indices   = ply.request_properties_from_element("tetrahedron", { "indices" }, 4);
+	// auto ply_tet_mask   = ply.request_properties_from_element("tetrahedron", { "mask" });
 	auto ply_tet_densities = ply.request_properties_from_element("tetrahedron", { "s" });
 	auto ply_tet_gradients = ply.request_properties_from_element("tetrahedron", { "grd_x", "grd_y", "grd_z" });
 	std::vector<std::shared_ptr<tinyply::PlyData>> ply_vertex_sh(sh_props.size());
@@ -79,7 +79,7 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	std::span pos  = getPlyData.template operator()<float3>(ply_vertices);
 	std::span inds = getPlyData.template operator()<uint4>(ply_tet_indices);
 	std::span dens = getPlyData.template operator()<float>(ply_tet_densities);
-	std::span mask = getPlyData.template operator()<uint8_t>(ply_tet_mask);
+	// std::span mask = getPlyData.template operator()<uint8_t>(ply_tet_mask);
 	std::span grad = getPlyData.template operator()<float3>(ply_tet_gradients);
 
 	const uint32_t numTets = dens.size();
@@ -108,19 +108,19 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 	vertices_cpu = std::vector<float3> (pos.begin(), pos.end());
 	densities_cpu = std::vector<float> (dens.begin(), dens.end());
 	gradients_cpu = std::vector<float3> (grad.begin(), grad.end());
-	mask_cpu = std::vector<uint8_t> (mask.begin(), mask.end());
-	full_indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
-	indices_cpu = std::vector<uint4>(numTets);
-
-	printf("Masking\n");
-	size_t n = 0;
-	for (size_t i=0; i<full_indices_cpu.size(); i++) {
-		if (mask_cpu[i] != 0) {
-			indices_cpu[n] = full_indices_cpu[i];
-			n++;
-		}
-	}
-	printf("Done\n");
+	// mask_cpu = std::vector<uint8_t> (mask.begin(), mask.end());
+	indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
+	// full_indices_cpu = std::vector<uint4> (inds.begin(), inds.end());
+	//
+	// printf("Masking\n");
+	// size_t n = 0;
+	// for (size_t i=0; i<full_indices_cpu.size(); i++) {
+	// 	if (mask_cpu[i] != 0) {
+	// 		indices_cpu[n] = full_indices_cpu[i];
+	// 		n++;
+	// 	}
+	// }
+	// printf("Done\n");
 
 	vertices         = context.UploadData(pos,  vk::BufferUsageFlagBits::eStorageBuffer);
 	tetIndices       = context.UploadData(indices_cpu, vk::BufferUsageFlagBits::eStorageBuffer);
@@ -206,21 +206,21 @@ void TetrahedronScene::Load(CommandContext& context, const std::filesystem::path
 		vertices_double[i * 3 + 2] = double(vertices_cpu[i].z);
 	}
 
-	size_t nb_inds = size_t(full_indices_cpu.size());
-	std::vector<size_t> indices_flat(nb_inds * 4);
-	for(size_t i = 0; i < nb_inds; ++i) {
-		indices_flat[i * 4 + 0] = size_t(full_indices_cpu[i].x);
-		indices_flat[i * 4 + 1] = size_t(full_indices_cpu[i].y);
-		indices_flat[i * 4 + 2] = size_t(full_indices_cpu[i].z);
-		indices_flat[i * 4 + 3] = size_t(full_indices_cpu[i].w);
-	}
-	GEO::initialize(GEO::GEOGRAM_INSTALL_ALL);
-	triangulation = GEO::Delaunay::create(GEO::coord_index_t(3), "BDEL");
-	GEO::Delaunay* base_ptr = triangulation.get();
-
-	// 2. Use dynamic_cast to safely cast it to the derived pointer.
-	auto* delaunay3d_ptr = dynamic_cast<GEO::Delaunay3d*>(base_ptr);
-	delaunay3d_ptr->set_mesh(vertices_double, indices_flat);
+	// size_t nb_inds = size_t(full_indices_cpu.size());
+	// std::vector<size_t> indices_flat(nb_inds * 4);
+	// for(size_t i = 0; i < nb_inds; ++i) {
+	// 	indices_flat[i * 4 + 0] = size_t(full_indices_cpu[i].x);
+	// 	indices_flat[i * 4 + 1] = size_t(full_indices_cpu[i].y);
+	// 	indices_flat[i * 4 + 2] = size_t(full_indices_cpu[i].z);
+	// 	indices_flat[i * 4 + 3] = size_t(full_indices_cpu[i].w);
+	// }
+	// GEO::initialize(GEO::GEOGRAM_INSTALL_ALL);
+	// triangulation = GEO::Delaunay::create(GEO::coord_index_t(3), "BDEL");
+	// GEO::Delaunay* base_ptr = triangulation.get();
+	//
+	// // 2. Use dynamic_cast to safely cast it to the derived pointer.
+	// auto* delaunay3d_ptr = dynamic_cast<GEO::Delaunay3d*>(base_ptr);
+	// delaunay3d_ptr->set_mesh(vertices_double, indices_flat);
 
 }
 

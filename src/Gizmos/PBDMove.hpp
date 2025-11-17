@@ -41,7 +41,7 @@ struct PBDContext {
 
     // PBD solver parameters
     float dt = 0.016f; // Timestep, e.g., for ~60fps
-    int solver_iterations = 4;
+    int solver_iterations = 16;
 };
 
 // Helper to calculate signed volume of a tetrahedron
@@ -50,8 +50,8 @@ float signedVolumeOfTet(const float3& p1, const float3& p2, const float3& p3, co
 }
 
 float stiffness_kernel(float x) {
-    float fx = -(x-0.5) * (x-0.5) + 0.25;
-    return max(1e-5f*fx, 1e-10f);
+    float fx = (x) * (x);
+    return max(0.1f*fx + 0.01f, 1e-10f);
     // return max(1e-5f*(1.f-x), 1e-10f);
 }
 
@@ -242,7 +242,11 @@ void initPBD(
                                     length(scene.vertices_cpu[v] - handle));
                                 k_x = min(k_x, k_x_i);
                             }
-                            dc.alpha = stiffness_kernel(k_x / radius);
+                            dc.alpha = 0.01;//stiffness_kernel(k_x / radius);
+                            if (k_x < 0.05) {
+                                dc.alpha = 0.0001;
+                            }
+                            // dc.alpha = stiffness_kernel(k_x / radius);
                             context.distance_constraints.push_back(dc);
                             existing_edges.insert({u, v});
                         }
@@ -354,7 +358,7 @@ std::vector<std::pair<uint32_t, float3>> updatePBD(
     for (auto& p : context.particles) {
         if (p.inverse_mass > 0.0f) {
             // Apply gravity or other forces
-            p.velocity.y -= 9.81f * context.dt;
+            // p.velocity.y -= 9.81f * context.dt;
             p.predicted_position = p.position + p.velocity * context.dt;
         } else {
             p.predicted_position = p.position; // Fixed/handle particles don't predict
@@ -368,12 +372,12 @@ std::vector<std::pair<uint32_t, float3>> updatePBD(
                 context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], c.rest_length, c.alpha,
                 dt);
         }
-        for (const auto& c : context.volume_constraints) {
-            solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
-                                  context.particles[c.p3_local_idx], context.particles[c.p4_local_idx],
-                                  c.rest_volume,
-                                  dt);
-        }
+        // for (const auto& c : context.volume_constraints) {
+        //     solveVolumeConstraint(context.particles[c.p1_local_idx], context.particles[c.p2_local_idx], 
+        //                           context.particles[c.p3_local_idx], context.particles[c.p4_local_idx],
+        //                           c.rest_volume,
+        //                           dt);
+        // }
     }
 
     // 4. Update final positions and velocities
