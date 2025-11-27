@@ -1,3 +1,6 @@
 [submodule "extern/Rose"]
 	path = extern/Rose
-	url = https://github.com/Shmaug/Rose
+	url = https://github.com/half-potato/Rose
+[submodule "extern/geogram"]
+	path = extern/geogram
+	url = https://github.com/BrunoLevy/geogram.git

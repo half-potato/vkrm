@@ -60,6 +60,16 @@ void markTets(uint3 threadId: SV_DispatchThreadID) {
     float density = scene.load_tet_density(tetId);
     bool visible = in_frustum && !(extent.x * extent.y < 1);
 
+    // if (visible) {
+    //     // Atomically increment the counter and get the previous value.
+    //     // This gives us a unique, dense index for this visible tet.
+    //     uint old;
+    //     blockSumAtomicCounter.InterlockedAdd(0, 1, old);
+    //
+    //     // Write the original tetId to the new, compact list.
+    //     // markedTets.Store<uint>(tetId * sizeof(uint), 1);
+    // }
+
     // Write 1 if visible, 0 otherwise
     markedTets.Store<uint>(tetId * sizeof(uint), visible ? 1 : 0);
 }

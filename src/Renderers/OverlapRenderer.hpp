@@ -10,8 +10,8 @@ private:
     float densityThreshold = 0.f;
 
     PipelineCache renderPipeline = PipelineCache({
-        { FindShaderPath("BillboardRenderer.3d.slang"), "vsmain" },
-        { FindShaderPath("BillboardRenderer.3d.slang"), "fsmain" }
+        { FindShaderPath("OverlapRenderer.slang"), "vsmain" },
+        { FindShaderPath("OverlapRenderer.slang"), "fsmain" }
     });
 
     inline Pipeline& GetPipeline(CommandContext& context, RenderContext& renderContext) {
@@ -50,12 +50,12 @@ public:
     inline const char* Name() const { return "Billboards"; }
     inline const char* Description() const { return "Draw billboards (imposters) at tet centroids, and compute intersection in fragment shader"; }
 
-    void DrawGui(CommandContext& context) {
-        ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.f);
-        ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
+	void DrawGui(CommandContext& context) {
+		ImGui::SliderFloat("Density threshold", &densityThreshold, 0.f, 1.f);
+		ImGui::SliderFloat("% to draw", &percentTets, 0, 1);
     }
 
-    void Render(CommandContext& context, RenderContext& renderContext) {
+	void Render(CommandContext& context, RenderContext& renderContext) {
         const float4x4 cameraToWorld = renderContext.camera.GetCameraToWorld();
         const float4x4 sceneToWorld  = renderContext.scene.Transform();
         const float4x4 worldToScene  = inverse(sceneToWorld);
@@ -110,3 +110,4 @@ public:
 };
 
 }
+

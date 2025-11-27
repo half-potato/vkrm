@@ -28,6 +28,7 @@ RWStructuredBuffer<float> tetOffsets;
 uniform float4x4 viewProjection;
 uniform float3   rayOrigin;
 uniform float    densityThreshold;
+uniform uint     tetCount;
 
 struct v2f {
     float4 pos : SV_Position;
@@ -213,7 +214,8 @@ void meshmain(
     v2f o = {};
     o.pos = 0;
 
-    if (threadId.x/4 < scene.numTets)
+    // if (threadId.x/4 < scene.numTets)
+    if (threadId.x/4 < tetCount)
     {
         const uint tetId = sortPayloads[threadId.x/4];
         // o.baseColor     = tetColors.Load<float3>(tetId * sizeof(float3));
@@ -269,6 +271,7 @@ void meshmain(
 
             const float offset = tetOffsets.Load(tetId);
             float3 colorGradient = scene.load_tet_gradient(tetId);
+            // using this offset allows us to calculate the color gradient more easily
             float offset2 = dot(rayOrigin - v0, colorGradient);
             o.baseColor = softplus(p0+p1+p2+p3, 10);
             // o.baseColor     = softplus(tetColors.Load<float3>(tetId * sizeof(float3)), 10);

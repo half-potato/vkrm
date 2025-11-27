@@ -16,3 +16,4 @@ CTestTestfile.cmake
 *.aps
 imgui.ini
 results/**
+ckpt.ply

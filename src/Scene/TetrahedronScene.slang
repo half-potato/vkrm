@@ -160,6 +160,29 @@ bool intersect_ray_tetrahedron(const float3 orig, const float3 dir, const float3
     return intersect_ray_tetrahedron(orig, dir, float4x3(v0, v1, v2, v3), t);
 }
 
+
+[Differentiable]
+inline float phi(float x) {
+    if (abs(x) < 1e-6) {
+        return 1.0f - x / 2.0f;
+    }
+    return (1.0f - exp(-x)) / x;
+    // return -(safe_expm1(-x)) / x;
+}
+
+[Differentiable]
+inline float4 compute_integral(float3 c0, float3 c1, float ddt) {
+    float alpha = exp(-ddt);
+    
+    float phi_val = phi(ddt);
+    
+    float w0 = phi_val - alpha;
+    float w1 = 1.0f - phi_val;
+    
+    float3 col = w0 * c0 + w1 * c1;
+    return float4(col, alpha);
+}
+
 [Differentiable]
 float4 compute_integral(float3 c0, float3 c1, float d_dt) {
     float alpha = exp(-d_dt);
