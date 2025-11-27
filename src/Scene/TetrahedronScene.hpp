@@ -9,9 +9,9 @@
 #include <Rose/Core/CommandContext.hpp>
 #include <Rose/Core/PipelineCache.hpp>
 #include <Rose/Scene/Mesh.hpp>
-#include <geogram/delaunay/delaunay_3d.h>
-#include <geogram/delaunay/delaunay.h>
-#include <geogram/basic/logger.h>
+// #include <geogram/delaunay/delaunay_3d.h>
+// #include <geogram/delaunay/delaunay.h>
+// #include <geogram/basic/logger.h>
 
 namespace vkDelTet {
 
@@ -45,7 +45,7 @@ public:
 	std::vector<std::set<uint32_t>>	   adjacency;
 	std::vector<std::vector<uint32_t>> vertex_to_tets;
 
-	GEO::Delaunay_var triangulation;
+	// GEO::Delaunay_var triangulation;
 
 public:
     // --- PUBLIC STATE & ACCESSORS ---

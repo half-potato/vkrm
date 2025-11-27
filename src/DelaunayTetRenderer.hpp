@@ -137,7 +137,7 @@ public:
 			float2 relativeMousePos = {absoluteMousePos.x - viewportMin.x, absoluteMousePos.y - viewportMin.y};
 			if (m_highlightRenderer.GetState() == SelectionState::IDLE) {
 				// SELECTING NEW POINTS
-				if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+				if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
 					if (ImGui::IsKeyDown(ImGuiMod_Shift)) {
 						m_highlightRenderer.ExtendSelection(context);
 					} else {
