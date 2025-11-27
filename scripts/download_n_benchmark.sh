@@ -19,8 +19,7 @@ RESULTS_DIR="results"
 mkdir -p "$RESULTS_DIR"
 
 # Define the resolutions to test
-# RESOLUTIONS=("test" "1080p" "2k" "4k")
-RESOLUTIONS=("test")
+RESOLUTIONS=("test" "1080p" "2k" "4k")
 CSV_FILE="${RESULTS_DIR}/all_fps_${VERSION}.csv"
 
 # Initialize the results file with a new header, including resolution
@@ -30,9 +29,9 @@ echo "Scene,Resolution,Average FPS" > "$CSV_FILE"
 scenes_4=("bicycle" "flowers" "garden" "stump" "treehill")
 scenes_2=("counter" "room" "kitchen" "bonsai")
 scenes_1=("truck" "train" "drjohnson" "playroom")
-scenes_4=("bicycle" "garden")
-scenes_2=("bonsai")
-scenes_1=("truck" "train" "drjohnson" "playroom")
+# scenes_4=("bicycle" "garden")
+# scenes_2=("bonsai")
+# scenes_1=("truck" "train" "drjohnson" "playroom")
 
 
 # --- Function to run benchmark for a scene ---
@@ -121,8 +120,8 @@ for scene in "${scenes_2[@]}"; do
     run_benchmark "$scene" 2 true
 done
 
-# for scene in "${scenes_1[@]}"; do
-#     run_benchmark "$scene" 1 true
-# done
+for scene in "${scenes_1[@]}"; do
+    run_benchmark "$scene" 1 true
+done
 
 echo "--- Script finished. All results are in ${CSV_FILE} ---"

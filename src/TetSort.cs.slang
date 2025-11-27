@@ -53,14 +53,3 @@ void updatePairs(uint3 threadId: SV_DispatchThreadID) {
         sortPayloads[threadId.x] = tetId;
     }
 }
-
-[shader("compute")]
-[numthreads(64, 1, 1)]
-void reorderTets(uint3 threadId: SV_DispatchThreadID) {
-    if (threadId.x >= numSpheres)
-        return;/*
-    const uint tetId = sortPayloads[threadId.x];
-    sortedColors.Store(threadId.x, scene.vertexColors.Load(tetId));
-    sortedIndices[threadId.x] = scene.tetIndices.Load4(tetId*sizeof(uint4));
-    sortedSpheres[threadId.x] = scene.tetCircumspheres[tetId];*/
-}

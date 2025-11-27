@@ -22,9 +22,6 @@ RWByteAddressBuffer outputColors;
 uniform float3 rayOrigin;
 uniform uint numPrimitives;
 RWStructuredBuffer<float> tetOffsets;
-RWStructuredBuffer<uint> visibleTets;        // The final, compact list of tet IDs
-RWStructuredBuffer<uint> drawArgs;   // Buffer to hold arguments for an indirect draw call
-// RWStructuredBuffer<float3> spheres;
 RWStructuredBuffer<uint> markedTets;        // The final, compact list of tet IDs
 
 // --------------------------------------------------------------------------------
@@ -125,9 +122,6 @@ float3 eval_deg3(SHCoeffs c, float3 dir) {
 [shader("compute")]
 [numthreads(32, 1, 1)]
 void main(uint3 index: SV_DispatchThreadID) {
-    // if (index.x >= drawArgs[0])
-    //     return;
-    // const uint tetId = visibleTets[index.x];//sortPairs[threadId.x].y;
     // if (tetId >= numPrimitives)
     //     return;
 

@@ -17,16 +17,11 @@ uniform float3   rayOrigin;
 uniform uint     numBlocks;
 uniform float2   outputResolution;
 RWByteAddressBuffer markedTets;
-RWByteAddressBuffer scannedOffsets;     // The result of the prefix sum
-RWByteAddressBuffer visibleTets;        // The final, compact list of tet IDs
+
 RWByteAddressBuffer drawArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer insDrawArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer meshDrawArgs;   // Buffer to hold arguments for an indirect draw call
-RWByteAddressBuffer kernelArgs;   // Buffer to hold arguments for an indirect draw call
 RWByteAddressBuffer blockSumAtomicCounter;
-
-// Add this buffer for inter-group communication
-RWByteAddressBuffer blockSums;
 
 [shader("compute")]
 [numthreads(64, 1, 1)]
@@ -106,91 +101,10 @@ void prefix_sum(uint3 groupId: SV_GroupID, uint groupThreadId: SV_GroupThreadID)
 
     // 3. Store the total sum for this block and clear the last element.
     if (groupThreadId == 0) {
-        blockSums.Store<uint>(groupId.x * sizeof(uint), shared_data[SCAN_GROUP_SIZE * 2 - 1]);
-        shared_data[SCAN_GROUP_SIZE * 2 - 1] = 0;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // 4. Down-Sweep Phase: Propagate sums down the tree to get the exclusive scan.
-    for (uint d = 1; d < (SCAN_GROUP_SIZE * 2); d <<= 1) {
-        stride >>= 1;
-        if (groupThreadId < d) {
-            uint i = stride * (2 * groupThreadId + 1) - 1;
-            uint j = stride * (2 * groupThreadId + 2) - 1;
-            uint temp = shared_data[i];
-            shared_data[i] = shared_data[j];
-            shared_data[j] += temp;
-        }
-        GroupMemoryBarrierWithGroupSync();
-    }
-
-    // 5. Write the final per-element offsets back to global memory.
-    if (global_idx_base < scene.numTets) {
-        scannedOffsets.Store<uint>(global_idx_base * sizeof(uint), shared_data[groupThreadId * 2]);
-    }
-    if (global_idx_base + 1 < scene.numTets) {
-        scannedOffsets.Store<uint>((global_idx_base + 1) * sizeof(uint), shared_data[groupThreadId * 2 + 1]);
-    }
-}
-
-[shader("compute")]
-[numthreads(256, 1, 1)]
-void scan_blocks_atomic(uint3 threadId: SV_DispatchThreadID)
-{
-    if (threadId.x >= numBlocks)
-        return;
-
-    // Read the number of visible tets in this block
-    uint countInThisBlock = blockSums.Load<uint>(threadId.x * sizeof(uint));
-
-    // Atomically add this block's count to the global total.
-    // This returns the "running total" of all blocks BEFORE this one.
-    uint runningTotalBeforeThis;
-    blockSumAtomicCounter.InterlockedAdd(0, countInThisBlock, runningTotalBeforeThis);
-    // Store this running total back into the buffer. This is now the
-    // starting offset for this block.
-    blockSums.Store<uint>(threadId.x * sizeof(uint), runningTotalBeforeThis);
-}
-
-
-[shader("compute")]
-[numthreads(64, 1, 1)]
-void compact_tets(uint3 threadId: SV_DispatchThreadID) {
-    if (threadId.x >= scene.numTets)
-        return;
-
-    uint tetId = threadId.x;
-    
-    bool isVisible = (markedTets.Load<uint>(tetId * sizeof(uint)) == 1);
-
-    if (isVisible) {
-        uint groupId = tetId / (SCAN_GROUP_SIZE * 2);
-        
-        // This assumes 'blockSums' has ALREADY been scanned in a second pass.
-        uint blockOffset = (groupId == 0) ? 0 : blockSums.Load<uint>((groupId - 1) * sizeof(uint));
-        
-        uint localOffset = scannedOffsets.Load<uint>(tetId * sizeof(uint));
-        
-        uint compactedIndex = blockOffset + localOffset;
-
-        if (compactedIndex < scene.numTets) {
-            visibleTets.Store<uint>(compactedIndex * sizeof(uint), tetId);
-        }
-    }
-    
-    // The last thread writes the final count.
-    if (threadId.x == scene.numTets - 1) {
-        uint numGroups = (scene.numTets + (SCAN_GROUP_SIZE * 2) - 1) / (SCAN_GROUP_SIZE * 2);
-        
-        // Get the sum of all previous blocks from the scanned blockSums buffer.
-        uint lastBlockSum = (numGroups <= 1) ? 0 : blockSums.Load<uint>((numGroups - 2) * sizeof(uint));
-        
-        // Get the total sum of the last block itself.
-        uint lastBlockTotal = blockSums.Load<uint>((numGroups - 1) * sizeof(uint));
-
-        // uint totalVisibleCount = lastBlockSum + lastBlockTotal;
-        uint totalVisibleCount = blockSumAtomicCounter.Load<uint>(0);
+        uint countInThisBlock = shared_data[SCAN_GROUP_SIZE * 2 - 1];
+        uint runningTotalBeforeThis;
+        blockSumAtomicCounter.InterlockedAdd(0, countInThisBlock, runningTotalBeforeThis);
+        uint totalVisibleCount = runningTotalBeforeThis;
         
         drawArgs.Store<uint>(sizeof(uint)*0, totalVisibleCount * 12);
         drawArgs.Store<uint>(sizeof(uint)*1, 1);
@@ -202,9 +116,6 @@ void compact_tets(uint3 threadId: SV_DispatchThreadID) {
         meshDrawArgs.Store<uint>(sizeof(uint)*1, 1);
         meshDrawArgs.Store<uint>(sizeof(uint)*2, 1);
         uint workgroupSize = 32;
-        kernelArgs.Store<uint>(sizeof(uint)*0, (totalVisibleCount + workgroupSize - 1) / workgroupSize);
-        kernelArgs.Store<uint>(sizeof(uint)*1, 1);
-        kernelArgs.Store<uint>(sizeof(uint)*2, 1);
 
         insDrawArgs.Store<uint>(sizeof(uint)*0, 3 * 4);
         insDrawArgs.Store<uint>(sizeof(uint)*1, totalVisibleCount);

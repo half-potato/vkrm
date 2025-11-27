@@ -24,8 +24,6 @@ private:
 	BufferRange<float3>   tetGradients;
 	BufferRange<float4>   tetCircumspheres;
 
-	BufferRange<uint>    visibleTets;
-	
 	float  sceneScale = 1.f;
 	float  densityScale = 1.f;
 

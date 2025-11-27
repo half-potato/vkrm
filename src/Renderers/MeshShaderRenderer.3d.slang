@@ -301,12 +301,12 @@ void meshmain(
 float4 fsmain(v2f v) : SV_Target {
     {
         const float d = length(v.rayDir);
-        v.rayDir /= d;
+        // v.rayDir /= d;
         v.planeDenominators /= d;
         v.dc_dt /= d;
     }
 
-    float3 rayDir = v.rayDir;
+    // float3 rayDir = v.rayDir;
     float opticalDepth = v.tetDensity;
     float4 all_t = v.planeNumerators / v.planeDenominators;
 
