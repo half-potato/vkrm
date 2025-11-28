@@ -323,22 +323,11 @@ float4 fsmain(v2f v) : SV_Target {
         min(t_exit.x, min(t_exit.y, min(t_exit.z, t_exit.w)))
     );
     
-    // bool parallel_miss = any((abs(v.planeDenominators) < 1e-6f) & (v.planeNumerators > 0.0f));
-    // if (parallel_miss) return float4(0,0,0,1);
-
     opticalDepth *= t.y - t.x;
 
     float3 c_start = max(v.baseColor + v.dc_dt * t.x, 0.f);
     float3 c_end = max(v.baseColor + v.dc_dt * t.y, 0.f);
     float4 color = compute_integral(c_end, c_start, opticalDepth);
 
-    // float3 color = {
-        // integrate_channel(t.x, t.y, v.baseColor.r, v.dc_dt, v.tetDensity),
-        // integrate_channel(t.x, t.y, v.baseColor.g, v.dc_dt, v.tetDensity),
-        // integrate_channel(t.x, t.y, v.baseColor.b, v.dc_dt, v.tetDensity)
-    // };
     return color;
-
-    // const float T = exp(-opticalDepth);
-    // return float4(color, T);
 }
