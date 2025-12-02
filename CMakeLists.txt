@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(DelaunayTetRenderer)
+project(rmvk)
 
 # We still find Vulkan for the *loader* (linking), but the headers 
 # will effectively come from RoseLib's frozen version.
@@ -20,20 +20,20 @@ set_source_files_properties(
     "-DDEFAULT_SHADER_INCLUDE_PATHS=\\\"${SHADER_INCLUDE_DIR}\\\"," )
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
 
-add_executable(DelaunayTetRenderer
+add_executable(rmvk
     src/App.cpp
     src/Scene/TetrahedronScene.cpp
 )
-set_target_properties(DelaunayTetRenderer PROPERTIES LINKER_LANGUAGE CXX)
+set_target_properties(rmvk PROPERTIES LINKER_LANGUAGE CXX)
 
-target_link_directories(DelaunayTetRenderer PRIVATE /usr/local/lib)
+target_link_directories(rmvk PRIVATE /usr/local/lib)
 
 # Link RoseLib FIRST. This ensures the frozen include directories in RoseLib
 # take precedence over system Vulkan includes if there is a conflict.
-target_link_libraries(DelaunayTetRenderer PRIVATE RoseLib Eigen3::Eigen)
-target_link_libraries(DelaunayTetRenderer PUBLIC Vulkan::Vulkan glm)
+target_link_libraries(rmvk PRIVATE RoseLib Eigen3::Eigen)
+target_link_libraries(rmvk PUBLIC Vulkan::Vulkan glm)
 
-target_compile_definitions(DelaunayTetRenderer PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
+target_compile_definitions(rmvk PUBLIC WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES GLM_FORCE_XYZW_ONLY IMGUI_DEFINE_MATH_OPERATORS VULKAN_HPP_NO_STRUCT_CONSTRUCTORS)
 
 add_executable(benchmark
     src/BenchmarkApp.cpp

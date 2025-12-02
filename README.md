@@ -1,4 +1,4 @@
-# vulkanrm
+# vkrm
 This is the Vulkan renderer for Radiance Meshes. The training code can be found [here](https://github.com/half-potato/radiance_meshes).
 The training code emits `ckpt.ply` files that can be rendered using this program. 
 
@@ -28,5 +28,5 @@ echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/local-slanguages.conf
 Then, finally, just run `cmake` and `make`.
 ```
 cmake -S . -B build
-cmake --build build
+cmake --build build -j8
 ```
