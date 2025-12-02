@@ -21,6 +21,9 @@ Install dependencies for Ubuntu:
 ```
 sudo apt install build-essentials libxrandr-dev libx11-dev libvulkan-dev libxinerama-dev libxcursor-dev libxi-dev libxcb-keysyms1-dev
 ```
+Slang is expected to be found in `/usr/local/lib/libslang.so`. I usually install Slang by building from the source [here](https://github.com/shader-slang/slang).
+However, it also ships with the latest version of Vulkan APIs.
+
 This could be necessary to execute:
 ```
 echo "/usr/local/lib" | sudo tee /etc/ld.so.conf.d/local-slanguages.conf
