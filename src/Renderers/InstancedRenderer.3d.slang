@@ -95,12 +95,10 @@ float4 fsmain(v2f v, float4 fragPos : SV_Position) : SV_Target {
     );
 
     opticalDepth *= t.y - t.x;
-    const float T = exp(-opticalDepth);
-    float3 color = {
-        integrate_channel(t.x, t.y, v.baseColor.r, v.dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.g, v.dc_dt, v.tetDensity),
-        integrate_channel(t.x, t.y, v.baseColor.b, v.dc_dt, v.tetDensity)
-    };
 
-    return float4(color, T);
+    float3 c_start = max(v.baseColor + v.dc_dt * t.x, 0.f);
+    float3 c_end = max(v.baseColor + v.dc_dt * t.y, 0.f);
+    float4 color = compute_integral(c_end, c_start, opticalDepth);
+
+    return color;
 }

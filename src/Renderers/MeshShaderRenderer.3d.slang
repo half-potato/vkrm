@@ -273,9 +273,9 @@ void meshmain(
             float3 colorGradient = scene.load_tet_gradient(tetId);
             // using this offset allows us to calculate the color gradient more easily
             float offset2 = dot(rayOrigin - v0, colorGradient);
-            o.baseColor = softplus(p0+p1+p2+p3, 10);
+            o.baseColor = softplus(offset + p0+p1+p2+p3, 10);
             // o.baseColor     = softplus(tetColors.Load<float3>(tetId * sizeof(float3)), 10);
-            o.baseColor += offset + offset2;
+            o.baseColor += offset2;
 
             o.dc_dt = dot(colorGradient, o.rayDir);
 
