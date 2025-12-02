@@ -15,6 +15,8 @@ Sorting in Vulkan is based on the work done by bones164 [here](https://github.co
 # Install Instructions
 
 ## Windows:
+The Vulkan SDK must be installed. Eigen3 must be installed and findable via CMake's `find_package(Eigen3)`. We recommend installing it via vcpkg with `vcpkg install eigen3`.
+All other dependencies are already included.
 
 ## Ubuntu:
 Install dependencies for Ubuntu:
