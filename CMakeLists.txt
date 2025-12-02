@@ -18,7 +18,7 @@ file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/src" SHADER_INCLUDE_DIR)
 set_source_files_properties(
     "${CMAKE_CURRENT_SOURCE_DIR}/extern/Rose/src/Rose/Core/ShaderModule.cpp" PROPERTIES COMPILE_FLAGS
     "-DDEFAULT_SHADER_INCLUDE_PATHS=\\\"${SHADER_INCLUDE_DIR}\\\"," )
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 REQUIRED NO_MODULE)
 
 add_executable(rmvk
     src/App.cpp
